@@ -1,5 +1,6 @@
 package com.Joedobo27.WUmod;
 
+import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const;
 import com.wurmonline.server.MiscConstants;
 import com.wurmonline.server.Servers;
 import com.wurmonline.server.creatures.Creature;
@@ -35,6 +36,10 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
     private MethodInfo raiseRockLevelMInfo;
     private CodeAttribute raiseRockLevelAttribute;
     private CodeIterator raiseRockLevelIterator;
+
+    private MethodInfo checkSaneAmountsMInfo;
+    private CodeAttribute checkSaneAmountsAttribute;
+    private CodeIterator checkSaneAmountsIterator;
 
     private Logger logger = Logger.getLogger(this.getClass().getName());
 
@@ -119,54 +124,71 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
 
     @Override
     public void init() {
-        /*
-        if (shardNClayToConcrete) {
-            HookManager.getInstance().registerHook("com.wurmonline.server.items.CreationEntryCreator", "createCreationEntries", "()V",
-                    new InvocationHandlerFactory() {
-                        @Override
-                        public InvocationHandler createInvocationHandler() {
-                            return new InvocationHandler() {
-
-                                @Override
-                                public Object invoke(Object object, Method method, Object[] args) throws Throwable {
-                                    Object toReturn = method.invoke(object, args);
-
-
-                                    return toReturn;
-                                }
-                            };
-                        }
-                    });
-        }
-        */
         if (useCustomSlopeMax) {
             try {
+                jaseBT jbt;
+                jaseBT jbt1;
                 ClassPool pool = HookManager.getInstance().getClassPool();
+
                 CtClass ctcCaveTileBehaviour = pool.get("com.wurmonline.server.behaviours.CaveTileBehaviour");
                 ClassFile cfCaveTileBehaviour = ctcCaveTileBehaviour.getClassFile();
-                CtClass ctcSelf = pool.get(this.getClass().getName());
+                ConstPool cpCaveTileBehaviour = cfCaveTileBehaviour.getConstPool();
 
+                CtClass ctcCreationEntry = pool.get("com.wurmonline.server.items.CreationEntry");
+                ClassFile cfCreationEntry = ctcCreationEntry.getClassFile();
+                ConstPool cpCreationEntry = cfCreationEntry.getConstPool();
+
+
+                // Change raiseRockLevel in CaveTileBehaviour to allow a configurable max slope when applying concrete.
+                setRaiseRockLevel(cfCaveTileBehaviour,
+                        "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z",
+                        "raiseRockLevel");
+                jbt = new jaseBT();
+                //Lines 578 - 640
+                jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ILOAD_2, Opcode.ILOAD_3, Opcode.INVOKESTATIC, Opcode.ISTORE,
+                        Opcode.ILOAD, Opcode.GETSTATIC, Opcode.GETFIELD, Opcode.IFEQ, Opcode.BIPUSH, Opcode.GOTO, Opcode.BIPUSH,
+                        Opcode.IF_ICMPGE, Opcode.ALOAD_0, Opcode.INVOKEVIRTUAL, Opcode.NEW, Opcode.DUP, Opcode.LDC_W, Opcode.INVOKESPECIAL,
+                        Opcode.ALOAD_1, Opcode.INVOKEVIRTUAL, Opcode.INVOKEVIRTUAL, Opcode.LDC_W, Opcode.INVOKEVIRTUAL, Opcode.INVOKEVIRTUAL,
+                        Opcode.INVOKEVIRTUAL, Opcode.ICONST_1, Opcode.IRETURN)));
+                jbt.setOperandStructure(new ArrayList<>(Arrays.asList("","",
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getMaxSurfaceDownSlope","(II)I",null,"com/wurmonline/server/behaviours/Terraforming",null),
+                        "07","07",
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Fieldref,"localServer","Lcom/wurmonline/server/ServerEntry;",null,"com/wurmonline/server/Servers",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Fieldref,"PVPSERVER","Z",null,"com/wurmonline/server/ServerEntry",null),
+                        "0008","e7","0005","d8","0032","",
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getCommunicator","()Lcom/wurmonline/server/creatures/Communicator;",null,"com/wurmonline/server/creatures/Creature",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Class,null,null,"java/lang/StringBuilder",null,null),
+                        "",
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_String,null,null,"The ",null,null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"<init>","(Ljava/lang/String;)V",null,"java/lang/StringBuilder",null),
+                        "",
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getName","()Ljava/lang/String;",null,"com/wurmonline/server/items/Item",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"append","(Ljava/lang/String;)Ljava/lang/StringBuilder;",null,"java/lang/StringBuilder",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_String,null,null," would only flow away.",null,null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"append","(Ljava/lang/String;)Ljava/lang/StringBuilder;",null,"java/lang/StringBuilder",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"toString","()Ljava/lang/String;",null,"java/lang/StringBuilder",null),
+                        jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"sendNormalServerMessage","(Ljava/lang/String;)V",null,"com/wurmonline/server/creatures/Communicator",null),
+                        "","")));
+                jbt.setOpcodeOperand();
+                String replaceResult = jaseBT.byteCodeFindReplace(jbt.getOpcodeOperand(), jbt.getOpcodeOperand(),
+                        "00,00,000000,0000,0000,000000,000000,000000,0000,000000,0000,000000,00,000000,000000,00,000000,000000,00,000000,000000,000000,000000,000000,a70011,00,00",
+                        getRaiseRockLevelIterator(), "raiseRockLevel");
+                //<editor-fold desc="Code replaced">
                 /*
-                String s1 = "";
-                s1 = s1.concat("public static boolean calcMaxMiningSlope(com.wurmonline.server.creatures.Creature performer, float pvp, float pve, int tileX, int tileY)");
-                s1 = s1.concat("{return true;}");
-                CtMethod m = CtNewMethod.make(s1, ctcCaveTileBehaviour);
-                m.setBody(ctcSelf.getMethod("calcMaxMiningSlope", "(Lcom/wurmonline/server/creatures/Creature;FFII)Z"), null);
-                logger.log(Level.INFO, "long name " + m.getLongName());
-                logger.log(Level.INFO, "declaring class " + m.getDeclaringClass().getName());
-                logger.log(Level.INFO, "signature " + m.getSignature());
+                00,00,000000,0000,0000,000000,000000,000000,0000,000000,0000,000000,00,000000,000000,00,000000,000000,00,000000,000000,000000,000000,000000,a70011,00,00
+                1c,1d,b803be,3607,1507,b203c1,b403c7,990008,10e7,a70005,10d8,a20032,2a,b60092,bb010e,59,1303b4,b70117,2b,b601a9,b6011b,1303cc,b6011b,b6011f,b60098,04,ac
+                removing -
+                    final int slopeDown = Terraforming.getMaxSurfaceDownSlope(tilex, tiley);
+                    if (slopeDown < (Servers.localServer.PVPSERVER ? -25 : -40)) {
+                        performer.getCommunicator().sendNormalServerMessage("The " + source.getName() + " would only flow away.");
+                        return true;
+                    }
+                Code to replace the removed section's function was inserted below it.
                 */
+                //</editor-fold>
 
                 CtMethod ctmRaiseRockLevel = ctcCaveTileBehaviour.getMethod("raiseRockLevel",
                         "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z");
-                /*
-                ConstPool cp = ctcCaveTileBehaviour.getClassFile().getConstPool();
-                for (int i=0; i < cp.getSize(); i++){
-                    try {
-                        logger.log(Level.INFO, "method names " + cp.getMethodrefName(i));
-                    }catch (ClassCastException e){}
-                }
-                */
                 String s = "";
                 s = s.concat("com.wurmonline.server.skills.Skills skills2 = $1.getSkills();com.wurmonline.server.skills.Skill mining2 = null;");
                 s = s.concat("try {mining2 = skills2.getSkill(1008);} catch (com.wurmonline.server.skills.NoSuchSkillException e) {mining2 = skills2.learn(1008, 1.0f);}");
@@ -174,50 +196,57 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
                 s = s.concat("int maxSlope = (int) (mining2.getKnowledge(0.0) * (com.wurmonline.server.Servers.localServer.PVPSERVER ? "+pvpSlopeMultiplier+" : "+pveSlopeMultiplier+"));");
                 s = s.concat("if (Math.abs(slopeDown1) > maxSlope)");
                 s = s.concat("{$1.getCommunicator().sendNormalServerMessage(\"The \" + source.getName() + \" would only flow away.\");return true;}");
-                ctmRaiseRockLevel.insertAt( 1272, "{ " + s + " }");
+                ctmRaiseRockLevel.insertAt( 1287, s);
 
-                setRaiseRockLevel(cfCaveTileBehaviour,
-                        "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z",
-                        "raiseRockLevel");
-
-                String replaceResult = jaseBT.byteCodeFindReplace(
-                        "ac,1c,1d,b803be,3607,1507,b203c1,b403c7,990008,10e7,a70005,10d8,a20032,2a,b60092,bb010e,59,1303b4,b70117,2b,b601a9,b6011b,1303cc,b6011b,b6011f,b60098,04,ac,2a",
-                        "1c,1d,b803be,3607,1507,b203c1,b403c7,990008,10e7,a70005,10d8,a20032,2a,b60092,bb010e,59,1303b4,b70117,2b,b601a9,b6011b,1303cc,b6011b,b6011f,b60098,04,ac",
-                        "00,00,000000,0000,0000,000000,000000,000000,0000,000000,0000,000000,00,000000,000000,00,000000,000000,00,000000,000000,000000,000000,000000,000000,00,00",
-                        getRaiseRockLevelIterator(), "raiseRockLevel");
-                //<editor-fold desc="Code replaced">
-                /*
-                removing -
-                    final int slopeDown = Terraforming.getMaxSurfaceDownSlope(tilex, tiley);
-                    if (slopeDown < (Servers.localServer.PVPSERVER ? -25 : -40)) {
-                        performer.getCommunicator().sendNormalServerMessage("The " + source.getName() + " would only flow away.");
-                        return true;
-                    }
-                Code to replace the removed section's function was insert above it.
-                */
-                //</editor-fold>
                 getRaiseRockLevelAttribute().computeMaxStack();
                 getRaiseRockLevelMInfo().rebuildStackMapIf6(pool, cfCaveTileBehaviour);
+                logger.log(Level.INFO,"insert " + replaceResult);
 
 
-                //logger.log(Level.INFO, replaceResult);
-                String printResult = jaseBT.byteCodePrint(getRaiseRockLevelIterator(), "raiseRockLevel",
-                        "C:\\Program Files (x86)\\Steam\\SteamApps\\common\\Wurm Unlimited Dedicated Server\\byte code prints");
+                // Change checkSaneAmounts of CreationEntry to exclude concrete from a section that was bugging creation because of the
+                // large weight difference between finished concrete and clay.
+                setCheckSaneAmounts(cfCreationEntry,
+                        "(Lcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/ItemTemplate;Lcom/wurmonline/server/creatures/Creature;Z)V",
+                        "checkSaneAmounts");
+                getCheckSaneAmountsIterator().insertGap(395,10);
+
+                jbt = new jaseBT();
+                // Lines 387 - 401
+                jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ALOAD, Opcode.INVOKEVIRTUAL, Opcode.IFEQ, Opcode.NOP, Opcode.NOP,
+                        Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.ALOAD_0,
+                        Opcode.GETFIELD, Opcode.BIPUSH, Opcode.IF_ICMPEQ)));
+                jbt.setOperandStructure(new ArrayList<>(Arrays.asList("05",
+                        jaseBT.findConstantPoolReference(cpCreationEntry, ConstPool.CONST_Methodref,"isCombine","()Z",null,"com/wurmonline/server/items/ItemTemplate",null),
+                        "0038","","","","","","","","","","","",
+                        jaseBT.findConstantPoolReference(cpCreationEntry,ConstPool.CONST_Fieldref,"objectCreated","I",null,"com/wurmonline/server/items/CreationEntry",null),
+                        "49","0025")));
+                jbt.setOpcodeOperand();
+                jbt1 = new jaseBT();
+                jbt1.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ALOAD, Opcode.INVOKEVIRTUAL, Opcode.IFEQ, Opcode.ALOAD_0,
+                        Opcode.GETFIELD, Opcode.SIPUSH, Opcode.IF_ICMPEQ, Opcode.ALOAD_0, Opcode.GETFIELD, Opcode.BIPUSH, Opcode.IF_ICMPEQ)));
+                jbt1.setOperandStructure(new ArrayList<>(Arrays.asList("05",
+                        jaseBT.findConstantPoolReference(cpCreationEntry,ConstPool.CONST_Methodref,"isCombine","()Z",null,"com/wurmonline/server/items/ItemTemplate",null),
+                        "0038","",
+                        jaseBT.findConstantPoolReference(cpCreationEntry,ConstPool.CONST_Fieldref,"objectCreated","I",null,"com/wurmonline/server/items/CreationEntry",null),
+                        "030e","002e","",
+                        jaseBT.findConstantPoolReference(cpCreationEntry,ConstPool.CONST_Fieldref,"objectCreated","I",null,"com/wurmonline/server/items/CreationEntry",null),
+                        "49","0025")));
+                jbt1.setOpcodeOperand();
+                replaceResult = jaseBT.byteCodeFindReplace(jbt.getOpcodeOperand(), jbt.getOpcodeOperand(), jbt1.getOpcodeOperand(),getCheckSaneAmountsIterator(),
+                        "checkSaneAmounts");
+                getCheckSaneAmountsAttribute().computeMaxStack();
+                getCheckSaneAmountsMInfo().rebuildStackMapIf6(pool,cfCreationEntry);
+                logger.log(Level.INFO,"insert " + replaceResult);
+
+                String printResult = jaseBT.byteCodePrint(getCheckSaneAmountsIterator(), "checkSaneAmounts",
+                        "C:\\Users\\Jason\\steamcmd\\red_beta\\byte code prints");
                 logger.log(Level.INFO, printResult);
+
 
             } catch (NotFoundException | CannotCompileException | BadBytecode e) {
                 logger.log(Level.WARNING, e.toString());
             }
         }
-    }
-
-    private static String makeRaiseRockInsertString(float pvp, float pve){
-        String s = "";
-        s = s.concat("int slopeDown1 = com.wurmonline.server.behaviours.Terraforming#getMaxSurfaceDownSlope($3, $4);");
-        s = s.concat("int maxSlope = calcMaxMiningSlope($1, " + Float.toString(pvp) + ", " + Float.toString(pve) + ");");
-        s = s.concat("if (Math.abs(slopeDown1) > maxSlope)");
-        s = s.concat("{performer.getCommunicator().sendNormalServerMessage(\"The \" + source.getName() + \" would only flow away.\");return true;}");
-        return s;
     }
 
     /**
@@ -265,4 +294,29 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
     public CodeAttribute getRaiseRockLevelAttribute(){return this.raiseRockLevelAttribute;}
 
     public MethodInfo getRaiseRockLevelMInfo(){return this.raiseRockLevelMInfo;}
+
+    public void setCheckSaneAmounts(ClassFile cf, String desc, String name) {
+        if (this.checkSaneAmountsMInfo == null || this.checkSaneAmountsIterator == null || this.checkSaneAmountsAttribute == null) {
+            for (List a : new List[]{cf.getMethods()}){
+                for(Object b : a){
+                    MethodInfo MInfo = (MethodInfo) b;
+                    if (Objects.equals(MInfo.getDescriptor(), desc) && Objects.equals(MInfo.getName(), name)){
+                        this.checkSaneAmountsMInfo = MInfo;
+                        break;
+                    }
+                }
+            }
+            if (this.checkSaneAmountsMInfo == null){
+                throw new NullPointerException();
+            }
+            this.checkSaneAmountsAttribute = this.checkSaneAmountsMInfo.getCodeAttribute();
+            this.checkSaneAmountsIterator = this.checkSaneAmountsAttribute.iterator();
+        }
+    }
+
+    public CodeIterator getCheckSaneAmountsIterator(){return this.checkSaneAmountsIterator;}
+
+    public CodeAttribute getCheckSaneAmountsAttribute(){return this.checkSaneAmountsAttribute;}
+
+    public MethodInfo getCheckSaneAmountsMInfo(){return this.checkSaneAmountsMInfo;}
 }
