@@ -7,15 +7,17 @@ import javassist.bytecode.Mnemonic;
 
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
+import java.lang.reflect.Array;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @SuppressWarnings("unused")
 public class jaseBT {
 
-    private Logger logger = Logger.getLogger(this.getClass().getName());
+    private static Logger logger = Logger.getLogger(jaseBT.class.getName());
     private ArrayList<Integer> opCodeStructure;
     private ArrayList<String > operandStructure;
     private String opcodeOperand;
@@ -182,11 +184,12 @@ public class jaseBT {
      * @param replace String, Hexadecimal values as strings.
      * @return  Return an ArrayList of int arrays.
      */
-    public static ArrayList<int[]> makeReplaceArray (String replace){
+    public static byte[] makeReplaceArray (String replace){
         ArrayList<int[]> replaceFinal = new ArrayList<>();
         String[] replaceSplit;
 
         replaceSplit = replace.split(",");
+        /*
         int[] replaceSub;
         //noinspection ForLoopReplaceableByForEach
         for (int i1 = 0; i1 < replaceSplit.length; i1++){
@@ -196,7 +199,19 @@ public class jaseBT {
             }
             replaceFinal.add(replaceSub.clone());
         }
-        return replaceFinal;
+        */
+        byte[] a = new byte[(replace.length() - (replaceSplit.length - 1)) / 2];
+        int aIndex = 0;
+        for (String b:replaceSplit){
+            for (int i=0; i < b.length()/2; i++){
+                int c = Short.valueOf(b.substring(i*2,(i*2)+2), 16);
+                a[aIndex] = (byte) c; // Intentionally doing a narrowing conversation. The two hex entries are all that matter.
+                // and whether 0xff is 255 or -1 doesn't matter.
+                aIndex++;
+            }
+        }
+
+        return a;
     }
 
     /**
@@ -218,13 +233,14 @@ public class jaseBT {
         int findSize;
         int subSize;
         int replacedIndexLines = 0;
+        String toReturn = "Nothing found or replaced in " + method + ".";
         LinkedList<HashMap<String, Integer>> byteCodeLinesSub = new LinkedList<>();
         ArrayList<HashMap<String, Integer>> matchedEntries = new ArrayList<>();
 
         // Convert string references to ArrayLists.
         ArrayList<HashMap<String, Integer>> findCodes = stringToArrayList(find);
         ArrayList<HashMap<String, Integer>> subFindCodes = stringToArrayList(subFind);
-        ArrayList<int[]> replaceL = makeReplaceArray(replace);
+        byte[] replaceL = makeReplaceArray(replace);
         findSize = findCodes.size();
         subSize = subFindCodes.size();
 
@@ -253,6 +269,17 @@ public class jaseBT {
             }
         }
         if (matchedEntries.size() > 0) {
+            if (replaceL.length != (subFind.length() - (subFindCodes.size() - 1)) / 2 ){
+                logger.log(Level.INFO,"replace: " + replace.length());
+                logger.log(Level.INFO,"sub: " + (subFind.length() - (subFindCodes.size() - 1)) / 2);
+                throw new IndexOutOfBoundsException();
+            }
+            logger.log(Level.INFO, "index " + matchedEntries.get(0).get("index"));
+            ci.write(replaceL, matchedEntries.get(0).get("index"));
+            toReturn = "Found and replaced bytecode in" + method + ".";
+        }
+        /*
+        if (matchedEntries.size() > 0) {
             int index = matchedEntries.get(0).get("index");
             for (int[] byteCodeIndexLine : replaceL) {
                 replacedIndexLines++;
@@ -264,7 +291,8 @@ public class jaseBT {
                 }
             }
         }
-        return "found and replaced " + replacedIndexLines + " indexed byte code lines in " + method;
+        */
+        return toReturn;
     }
 
     /**
