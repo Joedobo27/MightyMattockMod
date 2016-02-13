@@ -276,7 +276,7 @@ public class jaseBT {
             }
             logger.log(Level.INFO, "index " + matchedEntries.get(0).get("index"));
             ci.write(replaceL, matchedEntries.get(0).get("index"));
-            toReturn = "Found and replaced bytecode in" + method + ".";
+            toReturn = "Found and replaced bytecode in " + method + ".";
         }
         /*
         if (matchedEntries.size() > 0) {

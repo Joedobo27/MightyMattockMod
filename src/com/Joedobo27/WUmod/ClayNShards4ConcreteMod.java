@@ -1,6 +1,7 @@
 package com.Joedobo27.WUmod;
 
 import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const;
+import com.sun.xml.internal.ws.org.objectweb.asm.Opcodes;
 import com.wurmonline.server.MiscConstants;
 import com.wurmonline.server.Servers;
 import com.wurmonline.server.creatures.Creature;
@@ -8,6 +9,7 @@ import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.*;
 import javassist.*;
 import javassist.bytecode.*;
+import jdk.nashorn.internal.runtime.regexp.joni.constants.OPCode;
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.classhooks.InvocationHandlerFactory;
@@ -61,7 +63,7 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
         pveSlopeMultiplier = Double.valueOf(properties.getProperty("pveSlopeMultiplier", Double.toString(pveSlopeMultiplier)));
         useCustomDepthMax = Boolean.valueOf(properties.getProperty("useCustomSlopeMax", Boolean.toString(useCustomSlopeMax)));
         pvpDepthMultiplier = Double.valueOf(properties.getProperty("pvpSlopeMultiplier", Double.toString(pvpSlopeMultiplier)));
-        pveDepthMultiplier = Double.valueOf(properties.getProperty("pvpSlopeMultiplier", Double.toString(pvpSlopeMultiplier)));
+        pveDepthMultiplier = Double.valueOf(properties.getProperty("pvpSlopeMultiplier", Double.toString(pveDepthMultiplier)));
     }
 
     @Override
@@ -143,41 +145,59 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
                 setRaiseRockLevel(cfCaveTileBehaviour,
                         "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z",
                         "raiseRockLevel");
-
-
                 if (useCustomDepthMax){
                     //Change raiseRockLevel in CaveTileBehaviour to allow custom max water depth for concrete.
-                    getRaiseRockLevelIterator().insertGap(714,3);
+                    getRaiseRockLevelIterator().insertGap(712,34);
                     jbt = new jaseBT();
-                    jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.LDC, Opcode.GETFIELD)));
-                    jbt.setOperandStructure(new ArrayList<>(Arrays.asList(
-                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Class,null,null,"com/wurmonline/server/behaviours/CaveTileBehaviour",null,null).substring(2),
-                            String.format("%04X", cpCaveTileBehaviour.addFieldrefInfo(Integer.valueOf(jaseBT.findConstantPoolReference(
-                                    cpCaveTileBehaviour,ConstPool.CONST_Class,null,null,"com/wurmonline/server/behaviours/CaveTileBehaviour",null,null),16),"maxDepth", "I")))));
+                    jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ALOAD_0, Opcodes.INVOKEVIRTUAL, Opcodes.SIPUSH,
+                            Opcodes.INVOKEVIRTUAL, Opcodes.DCONST_0, Opcodes.INVOKEVIRTUAL, Opcodes.GETSTATIC, Opcodes.GETFIELD,
+                            Opcodes.IFEQ, Opcode.LDC2_W, Opcode.GOTO, Opcode.LDC2_W, Opcode.DMUL, Opcode.D2I, Opcode.INEG, Opcode.ILOAD,
+                            Opcode.SWAP)));
+                    jbt.setOperandStructure(new ArrayList<>(Arrays.asList("",
+                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getSkills","()Lcom/wurmonline/server/skills/Skills;",null,"com/wurmonline/server/creatures/Creature",null),
+                            "03f0",
+                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getSkillOrLearn","(I)Lcom/wurmonline/server/skills/Skill;",null,"com/wurmonline/server/skills/Skills",null),
+                            "",
+                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Methodref,"getKnowledge","(D)D",null,"com/wurmonline/server/skills/Skill",null),
+                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Fieldref,"localServer","Lcom/wurmonline/server/ServerEntry;",null,"com/wurmonline/server/Servers",null),
+                            jaseBT.findConstantPoolReference(cpCaveTileBehaviour,ConstPool.CONST_Fieldref,"PVPSERVER","Z",null,"com/wurmonline/server/ServerEntry",null),
+                            "0009",
+                            String.format("%04X", cpCaveTileBehaviour.addDoubleInfo(pvpDepthMultiplier) & 0xffff),
+                            "0006",
+                            String.format("%04X", cpCaveTileBehaviour.addDoubleInfo(pveDepthMultiplier) & 0xffff),
+                            "","","","08","")));
                     jbt.setOpcodeOperand();
                     logger.log(Level.INFO, jbt.getOpcodeOperand());
-                    jaseBT.byteCodeFindReplace("1508,00,00,00,10e7,a1021e","00,00,00,10e7",
+                    String replaceResult = jaseBT.byteCodeFindReplace(
+                            "00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,1508,10e7,a1021e",
+                            "00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,1508,10e7",
                             jbt.getOpcodeOperand(),getRaiseRockLevelIterator(),"raiseRockLevel");
-
-
+                    logger.log(Level.INFO, replaceResult);
                     String printResult = jaseBT.byteCodePrint(getRaiseRockLevelIterator(), "raiseRockLevel",
                             "C:\\Users\\Jason\\steamcmd\\red_beta\\byte code prints");
                     logger.log(Level.INFO, printResult);
-
-
                     getRaiseRockLevelAttribute().computeMaxStack();
                     getRaiseRockLevelMInfo().rebuildStackMapIf6(pool,cfCaveTileBehaviour);
-
                 }
                 if (useCustomSlopeMax) {
                     CtClass ctcCreationEntry = pool.get("com.wurmonline.server.items.CreationEntry");
                     ClassFile cfCreationEntry = ctcCreationEntry.getClassFile();
                     ConstPool cpCreationEntry = cfCreationEntry.getConstPool();
 
-
-                    // Change raiseRockLevel in CaveTileBehaviour to allow a configurable max slope when applying concrete.
+                    //<editor-fold desc="Change information.">
+                    /*
+                    Change raiseRockLevel in CaveTileBehaviour to allow a configurable max slope when applying concrete.
+                    Lines 578 - 640
+                    removing -
+                        final int slopeDown = Terraforming.getMaxSurfaceDownSlope(tilex, tiley);
+                        if (slopeDown < (Servers.localServer.PVPSERVER ? -25 : -40)) {
+                            performer.getCommunicator().sendNormalServerMessage("The " + source.getName() + " would only flow away.");
+                            return true;
+                        }
+                    Code to replace the removed section's function was inserted below it and consists of the insertAt string.
+                    */
+                    //</editor-fold>
                     jbt = new jaseBT();
-                    //Lines 578 - 640
                     jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ILOAD_2, Opcode.ILOAD_3, Opcode.INVOKESTATIC, Opcode.ISTORE,
                             Opcode.ILOAD, Opcode.GETSTATIC, Opcode.GETFIELD, Opcode.IFEQ, Opcode.BIPUSH, Opcode.GOTO, Opcode.BIPUSH,
                             Opcode.IF_ICMPGE, Opcode.ALOAD_0, Opcode.INVOKEVIRTUAL, Opcode.NEW, Opcode.DUP, Opcode.LDC_W, Opcode.INVOKESPECIAL,
@@ -208,19 +228,6 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
                             getRaiseRockLevelIterator(), "raiseRockLevel");
                     getRaiseRockLevelAttribute().computeMaxStack();
                     getRaiseRockLevelMInfo().rebuildStackMapIf6(pool,cfCaveTileBehaviour);
-                    //<editor-fold desc="Code replaced">
-                /*
-                00,00,000000,0000,0000,000000,000000,000000,0000,000000,0000,000000,00,000000,000000,00,000000,000000,00,000000,000000,000000,000000,000000,a70011,00,00
-                1c,1d,b803be,3607,1507,b203c1,b403c7,990008,10e7,a70005,10d8,a20032,2a,b60092,bb010e,59,1303b4,b70117,2b,b601a9,b6011b,1303cc,b6011b,b6011f,b60098,04,ac
-                removing -
-                    final int slopeDown = Terraforming.getMaxSurfaceDownSlope(tilex, tiley);
-                    if (slopeDown < (Servers.localServer.PVPSERVER ? -25 : -40)) {
-                        performer.getCommunicator().sendNormalServerMessage("The " + source.getName() + " would only flow away.");
-                        return true;
-                    }
-                Code to replace the removed section's function was inserted below it.
-                */
-                    //</editor-fold>
 
                     CtMethod ctmRaiseRockLevel = ctcCaveTileBehaviour.getMethod("raiseRockLevel",
                             "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z");
@@ -235,17 +242,21 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
                     logger.log(Level.INFO, replaceResult);
 
 
-
-                    // Change checkSaneAmounts of CreationEntry to exclude concrete from a section that was bugging creation because of
-                    // 1) combine for all 2)large weight difference between finished concrete and clay.
+                    //<editor-fold desc="Change information.">
+                    /*
+                    Change checkSaneAmounts of CreationEntry to exclude concrete from a section that was bugging creation because of
+                    1) combine for all 2)large weight difference between finished concrete and clay.
+                    Lines 387 - 401
+                    added "&& this.objectCreated != 782"
+                         if (template.isCombine() && this.objectCreated != 782 && this.objectCreated != 73)
+                    */
+                    //</editor-fold>
                     setCheckSaneAmounts(cfCreationEntry,
                             "(Lcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/ItemTemplate;Lcom/wurmonline/server/creatures/Creature;Z)V",
                             "checkSaneAmounts");
                     getCheckSaneAmountsIterator().insertGap(395, 10);
                     jbt = new jaseBT();
-                    // Lines 387 - 401
-                    // added "&& this.objectCreated != 782"
-                    //      if (template.isCombine() && this.objectCreated != 782 && this.objectCreated != 73)
+
                     jbt.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ALOAD, Opcode.INVOKEVIRTUAL, Opcode.IFEQ, Opcode.NOP, Opcode.NOP,
                             Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.NOP, Opcode.ALOAD_0,
                             Opcode.GETFIELD, Opcode.BIPUSH, Opcode.IF_ICMPEQ)));
@@ -272,9 +283,6 @@ public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable,
                     getCheckSaneAmountsMInfo().rebuildStackMapIf6(pool, cfCreationEntry);
                     logger.log(Level.INFO, replaceResult);
                 }
-
-
-
             } catch (NotFoundException | CannotCompileException | BadBytecode e) {
                 e.printStackTrace();
             }
