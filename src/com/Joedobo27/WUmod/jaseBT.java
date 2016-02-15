@@ -7,11 +7,9 @@ import javassist.bytecode.Mnemonic;
 
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
-import java.lang.reflect.Array;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @SuppressWarnings("unused")
@@ -23,6 +21,9 @@ public class jaseBT {
     private String opcodeOperand;
 
 
+    /**
+     * This method combines the values in opCodeStructure and operandStructure for its instance and sets the new value.
+     */
     public void setOpcodeOperand() {
         String s = "";
         s = s.concat(String.format("%02X", this.opCodeStructure.get(0) & 0xff));
@@ -45,6 +46,97 @@ public class jaseBT {
 
     public String getOpcodeOperand() {return this.opcodeOperand;}
 
+    /**
+     * This method looks for matches in the constantPool and returns found addresses.
+     *
+     * @param cp is type ConstPool. This object is for accessing a specific ConstPool.
+     * @param const_type is a reference to static types in ConstantPool.CONST_*. It controls which switch branch is executed.
+     * @param javapDesc is a string. This string data is copied directly from javap.exe's data dump and represents a description
+     *                  of its explanatory value in the constantPool.
+     * @return is a string of 4 digits. These 4 numbers(in string form) are the address in the ConstantPool
+     */
+    public static String findConstantPoolReference(ConstPool cp, int const_type, String javapDesc) {
+        String[] splitDesc;
+        String classPath = null;
+        String name = null;
+        String type = null;
+        String nameMatch;
+        String classInfo;
+        String stringValue;
+        String toReturn = null;
+
+        for (int i = 1; i < cp.getSize(); i++) {
+            try {
+                switch (const_type) {
+                    case ConstPool.CONST_InterfaceMethodref:
+                        break;
+                    case ConstPool.CONST_Methodref:
+                        splitDesc = javapDesc.split("[.:]");
+                        if (splitDesc.length == 3) {
+                            classPath = splitDesc[0].replaceAll("/", ".");
+                            name = splitDesc[1];
+                            type = splitDesc[2];
+                        }
+                        if (splitDesc.length == 2){
+                            classPath = cp.getClassInfo(1);
+                            name = splitDesc[0];
+                            type = splitDesc[1];
+                        }
+                        nameMatch = cp.eqMember(name, type, i);
+                        classInfo = cp.getClassInfo(cp.getMethodrefClass(i));
+                        if (nameMatch != null && classInfo != null && Objects.equals(classInfo, classPath)) {
+                            toReturn = String.format("%04X", i & 0xffff);
+                        }
+                        break;
+                    case ConstPool.CONST_String:
+                        stringValue = cp.getStringInfo(i);
+                        if (stringValue != null && Objects.equals(stringValue, javapDesc)) {
+                            toReturn = String.format("%04X", i & 0xffff);
+                        }
+                        break;
+                    case ConstPool.CONST_Fieldref:
+                        splitDesc = javapDesc.split("[.:]");
+                        if (splitDesc.length == 3) {
+                            classPath = splitDesc[0].replaceAll("/", ".");
+                            name = splitDesc[1];
+                            type = splitDesc[2];
+                        }
+                        if (splitDesc.length == 2){
+                            classPath = cp.getClassInfo(1);
+                            name = splitDesc[0];
+                            type = splitDesc[1];
+                        }
+                        nameMatch = cp.eqMember(name, type, i);
+                        classInfo = cp.getClassInfo(cp.getMethodrefClass(i));
+                        if (nameMatch != null && classInfo != null && Objects.equals(classInfo, classPath)) {
+                            toReturn = String.format("%04X", i & 0xffff);
+                        }
+                        break;
+                    case ConstPool.CONST_Class:
+                        stringValue = cp.getClassInfo(i);
+                        if (stringValue != null && Objects.equals(stringValue, javapDesc.replaceAll("/","."))) {
+                            toReturn = String.format("%04X", i & 0xffff);
+                        }
+                        break;
+                    case ConstPool.CONST_Long:
+                        Long l = cp.getLongInfo(i);
+                        if (Objects.equals(l, Long.valueOf(javapDesc))){
+                            toReturn = String.format("%04X", i & 0xffff);
+                        }
+                }
+            } catch (ClassCastException e) {
+            }
+            if (toReturn != null) {
+                break;
+            }
+        }
+        if (toReturn == null) {
+            throw new NullPointerException();
+        }
+        return toReturn;
+    }
+
+    @Deprecated
     public static String findConstantPoolReference(ConstPool cp, int const_type, String methodName, String methodDesc, String strMatch, String classMatch, String interfaceCount) {
         String a;
         String b;
@@ -179,33 +271,22 @@ public class jaseBT {
     }
 
     /**
-     * This method constructs a list of int arrays that can be used in a CodeIterator's write method.
+     * This method constructs a byte[] that can be used in a CodeIterator's write method.
      *
      * @param replace String, Hexadecimal values as strings.
-     * @return  Return an ArrayList of int arrays.
+     * @return  Return a byte[] equivalent of replace.
      */
     public static byte[] makeReplaceArray (String replace){
         ArrayList<int[]> replaceFinal = new ArrayList<>();
         String[] replaceSplit;
 
         replaceSplit = replace.split(",");
-        /*
-        int[] replaceSub;
-        //noinspection ForLoopReplaceableByForEach
-        for (int i1 = 0; i1 < replaceSplit.length; i1++){
-            replaceSub = new int[replaceSplit[i1].length()/2];
-            for (int i2 = 0; i2 < replaceSplit[i1].length()/2; i2++) {
-                replaceSub[i2] = Integer.valueOf(replaceSplit[i1].substring(i2 * 2, (i2 * 2) + 2), 16);
-            }
-            replaceFinal.add(replaceSub.clone());
-        }
-        */
         byte[] a = new byte[(replace.length() - (replaceSplit.length - 1)) / 2];
         int aIndex = 0;
         for (String b:replaceSplit){
             for (int i=0; i < b.length()/2; i++){
                 int c = Short.valueOf(b.substring(i*2,(i*2)+2), 16);
-                a[aIndex] = (byte) c; // Intentionally doing a narrowing conversation. The two hex entries are all that matter.
+                a[aIndex] = (byte) c; // Intentionally doing a narrowing conversion. The two hex entries are all that matter.
                 // and whether 0xff is 255 or -1 doesn't matter.
                 aIndex++;
             }
@@ -218,14 +299,14 @@ public class jaseBT {
      * This method is used to find and replace byte code which the CodeIterator ci represents. To use this tool specify hexadecimal values
      * (as a string) that must be found in byte code. The "subFind" string of hexadecimal values is a subset of the find value and represent
      * what values will be replace. Finally, "replace" is a string of hexadecimal values that will be substituted in place of "subFind".
-     * All the hexidecimal value-strings are coma delimited to indicate byte code indexing.
+     * All the hexadecimal value-strings are coma delimited to indicate byte code indexing.
      *
      * @param find String, This arg is many hexadecimal values in string form, its length must be evenly divisible by 2,
      *             and commas delimit byteCode indexing.
      * @param subFind String, This arg is many hexadecimal values in string form, it must be a subset of find
-     *                and is formated like find.
-     * @param replace String, This arg is many hexadecimal values in string form. These are the int that will be wrttin in place of find.
-     *                it doesn't have to be the same format but must have the same overall length as subFind.
+     *                and is formatted like find.
+     * @param replace String, This arg is many hexadecimal values in string form. These are the byte that will be written in place of find.
+     *                The number or length of non-comma characters must match subFind's length.
      * @param ci CodeIterator, This object represents the method which will be changed.
      * @param method String, The name of the target method which will be changed.
      */
@@ -233,7 +314,7 @@ public class jaseBT {
         int findSize;
         int subSize;
         int replacedIndexLines = 0;
-        String toReturn = "Nothing found or replaced in " + method + ".";
+        String toReturn = "NOTHING found or replaced in " + method + ".";
         LinkedList<HashMap<String, Integer>> byteCodeLinesSub = new LinkedList<>();
         ArrayList<HashMap<String, Integer>> matchedEntries = new ArrayList<>();
 
@@ -270,28 +351,11 @@ public class jaseBT {
         }
         if (matchedEntries.size() > 0) {
             if (replaceL.length != (subFind.length() - (subFindCodes.size() - 1)) / 2 ){
-                logger.log(Level.INFO,"replace: " + replace.length());
-                logger.log(Level.INFO,"sub: " + (subFind.length() - (subFindCodes.size() - 1)) / 2);
                 throw new IndexOutOfBoundsException();
             }
-            logger.log(Level.INFO, "index " + matchedEntries.get(0).get("index"));
             ci.write(replaceL, matchedEntries.get(0).get("index"));
             toReturn = "Found and replaced bytecode in " + method + ".";
         }
-        /*
-        if (matchedEntries.size() > 0) {
-            int index = matchedEntries.get(0).get("index");
-            for (int[] byteCodeIndexLine : replaceL) {
-                replacedIndexLines++;
-                for (int byteInt : byteCodeIndexLine) {
-                    //logger.log(Level.INFO, "hex " + Integer.toHexString(byteInt));
-                    //logger.log(Level.INFO, "index " + index);
-                    ci.writeByte(byteInt, index);
-                    index++;
-                }
-            }
-        }
-        */
         return toReturn;
     }
 
@@ -365,38 +429,29 @@ public class jaseBT {
                 switch (ci.lookAhead() - index){
                     case 1:
                         lineSub.put("opCode", ci.byteAt(index));
-                        //String.format("%02X", ci.byteAt(index));
                         break;
                     case 2:
                         bitLine = ci.s16bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff00) >>> 8);
-                        //String.format("%02X", (bitLine & 0xff00) >>> 8);
                         lineSub.put("opOperand1", (bitLine & 0x00ff));
-                        //String.format("%02X", (bitLine & 0x00ff));
                         break;
                     case 3:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%04X", (bitLine & 0x00ffff00) >>> 8);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         break;
                     case 4:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%06X", bitLine & 0x00ffffff);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         lineSub.put("opOperand3", (bitLine & 0x000000ff));
                         break;
                     case 5:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%06X", bitLine & 0x00ffffff);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         lineSub.put("opOperand3", (bitLine & 0x000000ff));
                         bitLine2 = ci.byteAt(index + 4);
@@ -405,9 +460,7 @@ public class jaseBT {
                     case 6:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%06X", bitLine & 0x00ffffff);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         lineSub.put("opOperand3", (bitLine & 0x000000ff));
                         bitLine2 = ci.s16bitAt(index + 4);
@@ -417,9 +470,7 @@ public class jaseBT {
                     case 7:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%06X", bitLine & 0x00ffffff);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         lineSub.put("opOperand3", (bitLine & 0x000000ff));
                         bitLine2 = ci.s32bitAt(index + 4);
@@ -430,9 +481,7 @@ public class jaseBT {
                     case 8:
                         bitLine = ci.s32bitAt(index);
                         lineSub.put("opCode", (bitLine & 0xff000000) >>> 24);
-                        //String.format("%02X", (bitLine & 0xff000000) >>> 24);
                         lineSub.put("opOperand1", (bitLine & 0x00ff0000) >>> 16);
-                        //String.format("%06X", bitLine & 0x00ffffff);
                         lineSub.put("opOperand2", (bitLine & 0x0000ff00) >>> 8);
                         lineSub.put("opOperand3", (bitLine & 0x000000ff));
                         bitLine2 = ci.s32bitAt(index + 4);
