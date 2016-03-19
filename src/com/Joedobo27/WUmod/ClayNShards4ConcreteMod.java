@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@SuppressWarnings({"Convert2Lambda", "Convert2streamapi"})
+@SuppressWarnings({"Convert2Lambda", "Convert2streamapi", "unused"})
 public class ClayNShards4ConcreteMod implements WurmMod, Initable, Configurable, ServerStartedListener, ItemTemplatesCreatedListener {
 
     private boolean shardNClayToConcrete = false;

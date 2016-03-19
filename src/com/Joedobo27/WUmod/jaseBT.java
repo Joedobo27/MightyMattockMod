@@ -57,13 +57,13 @@ public class jaseBT {
      */
     public static String findConstantPoolReference(ConstPool cp, int const_type, String javapDesc) {
         String[] splitDesc;
-        String classPath = null;
-        String name = null;
-        String type = null;
+        String classPath = "";
+        String name = "";
+        String type = "";
         String nameMatch;
         String classInfo;
         String stringValue;
-        String toReturn = null;
+        String toReturn = "";
 
         for (int i = 1; i < cp.getSize(); i++) {
             try {
@@ -125,13 +125,14 @@ public class jaseBT {
                         }
                 }
             } catch (ClassCastException e) {
+                // This method does ConstPool information fetching that throws this exception often, ignore it.
             }
-            if (toReturn != null) {
+            if (!Objects.equals(toReturn, "")) {
                 break;
             }
         }
-        if (toReturn == null) {
-            throw new NullPointerException();
+        if (Objects.equals(toReturn, "")) {
+            throw new UnsupportedOperationException();
         }
         return toReturn;
     }
@@ -186,6 +187,7 @@ public class jaseBT {
                         }
                 }
             } catch (ClassCastException e) {
+                // This method does ConstPool information fetching that throws this exception often, ignore it.
             }
             if (toReturn != null) {
                 break;
