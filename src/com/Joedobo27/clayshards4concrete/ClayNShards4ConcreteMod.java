@@ -139,7 +139,7 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
             boolean isModifiedCheckSaneAmounts = true;
             byte[] findPoolResult;
             try {
-                findPoolResult = findConstantPoolReference(creationEntry.getConstPool(),
+                findConstantPoolReference(creationEntry.getConstPool(),
                         "// Method com/Joedobo27/common/Common.checkSaneAmountsExceptionsHook:(III)I");
             } catch (UnsupportedOperationException e){
                 isModifiedCheckSaneAmounts = false;
@@ -236,47 +236,6 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
 
 
         }
-        if (false) {
-            //<editor-fold desc="Modify raiseRockLevel() in CaveTileBehaviour">
-                /*
-                //Change 766+ in raiseRockLevel of CaveTileBehaviour to allow custom max water depth for concrete.
-                Inserting 34 gaps to add new code.
-                replaced-
-                    if (h >= -25) {
-                with-
-                    if (h >= -1 * (int)performer.getSkills().getSkillOrLearn(1008).getKnowledge(0.0d) *
-                        (Servers.localServer.PVPSERVER ? pvpDepthMultiplier : pveDepthMultiplier)) {
-                */
-            //</editor-fold>
-            /*
-            raiseRockLevelIterator.insertGap(766,34);
-            replace = new JDBByteCode();
-            replace.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ALOAD_0, Opcode.INVOKEVIRTUAL, Opcode.SIPUSH,
-                    Opcode.INVOKEVIRTUAL, Opcode.DCONST_0, Opcode.INVOKEVIRTUAL, Opcode.GETSTATIC, Opcode.GETFIELD,
-                    Opcode.IFEQ, Opcode.LDC2_W, Opcode.GOTO, Opcode.LDC2_W, Opcode.DMUL, Opcode.D2I, Opcode.INEG, Opcode.ILOAD,
-                    Opcode.SWAP)));
-            replace.setOperandStructure(new ArrayList<>(Arrays.asList("",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/creatures/Creature.getSkills:()Lcom/wurmonline/server/skills/Skills;"),
-                    "03f0",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/skills/Skills.getSkillOrLearn:(I)Lcom/wurmonline/server/skills/Skill;"),
-                    "",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/skills/Skill.getKnowledge:(D)D"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Field com/wurmonline/server/Servers.localServer:Lcom/wurmonline/server/ServerEntry;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Field com/wurmonline/server/ServerEntry.PVPSERVER:Z"),
-                    "0009",
-                    String.format("%04X", cpCaveTileBehaviour.addDoubleInfo(pvpDepthMultiplier) & 0xffff),
-                    "0006",
-                    String.format("%04X", cpCaveTileBehaviour.addDoubleInfo(pveDepthMultiplier) & 0xffff),
-                    "","","","08","")));
-            replace.setOpcodeOperand();
-            String replaceResult = JDBByteCode.byteCodeFindReplace(
-                    "00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,1508,10e7,a1021d",
-                    "00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,1508,10e7",
-                    replace.getOpcodeOperand(),raiseRockLevelIterator,"raiseRockLevel");
-            logger.log(Level.INFO, replaceResult);
-            raiseRockLevelMInfo.rebuildStackMapIf6(pool,cfCaveTileBehaviour);
-            */
-        }
         if (useCustomSlopeMax) {
 
             //<editor-fold desc="Modify raiseRockLevel() in CaveTileBehaviour">
@@ -341,55 +300,6 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
             boolean findResult = findReplaceCodeIterator(raiseRockLevel.getCodeIterator(), find, replace);
             useCustomSlopeMaxSuccesses[0] = findResult ? 1 : 0;
             logger.log(Level.FINE, "raiseRockLevel find and replace:" + Boolean.toString(findResult));
-
-            if (false) {
-            /*
-            CtMethod ctmRaiseRockLevel = ctcCaveTileBehaviour.getMethod("raiseRockLevel",
-                    "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z");
-            String s = "";
-            s += "com.wurmonline.server.skills.Skills skills2 = $1.getSkills();com.wurmonline.server.skills.Skill mining2 = null;";
-            s += "try {mining2 = skills2.getSkill(1008);} catch (com.wurmonline.server.skills.NoSuchSkillException e) {mining2 = skills2.learn(1008, 1.0f);}";
-            s += "int slopeDown1 = com.wurmonline.server.behaviours.Terraforming#getMaxSurfaceDownSlope($3, $4);";
-            s += "int maxSlope = (int) (mining2.getKnowledge(0.0) * (com.wurmonline.server.Servers.localServer.PVPSERVER ? " + pvpSlopeMultiplier + " : " + pveSlopeMultiplier + "));";
-            s += "if (Math.abs(slopeDown1) > maxSlope)";
-            s += "{$1.getCommunicator().sendNormalServerMessage(\"The \" + source.getName() + \" would only flow away.\");return true;}";
-            ctmRaiseRockLevel.insertAt(1288, s); // line 140 and before "if (performer.getLayer() < 0) {"
-
-            find = new JDBByteCode();
-            find.setOpCodeStructure(new ArrayList<>(Arrays.asList(Opcode.ILOAD_2, Opcode.ILOAD_3, Opcode.INVOKESTATIC, Opcode.ISTORE,
-                    Opcode.ILOAD, Opcode.GETSTATIC, Opcode.GETFIELD, Opcode.IFEQ, Opcode.BIPUSH, Opcode.GOTO, Opcode.BIPUSH,
-                    Opcode.IF_ICMPGE, Opcode.ALOAD_0, Opcode.INVOKEVIRTUAL, Opcode.NEW, Opcode.DUP, Opcode.INVOKESPECIAL, Opcode.LDC_W,
-                    Opcode.INVOKEVIRTUAL, Opcode.ALOAD_1, Opcode.INVOKEVIRTUAL, Opcode.INVOKEVIRTUAL, Opcode.LDC_W, Opcode.INVOKEVIRTUAL,
-                    Opcode.INVOKEVIRTUAL, Opcode.INVOKEVIRTUAL, Opcode.ICONST_1, Opcode.IRETURN)));
-            find.setOperandStructure(new ArrayList<>(Arrays.asList("", "",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/behaviours/Terraforming.getMaxSurfaceDownSlope:(II)I"),
-                    "07", "07",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Field com/wurmonline/server/Servers.localServer:Lcom/wurmonline/server/ServerEntry;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Field com/wurmonline/server/ServerEntry.PVPSERVER:Z"),
-                    "0008", "e7", "0005", "d8", "0029", "",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/creatures/Creature.getCommunicator:()Lcom/wurmonline/server/creatures/Communicator;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// class java/lang/StringBuilder"),
-                    "",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method java/lang/StringBuilder.\"<init>\":()V"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// String The "),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;"),
-                    "",
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/items/Item.getName:()Ljava/lang/String;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// String  would only flow away."),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method java/lang/StringBuilder.toString:()Ljava/lang/String;"),
-                    JDBByteCode.findConstantPoolReference(cpCaveTileBehaviour, "// Method com/wurmonline/server/creatures/Communicator.sendNormalServerMessage:(Ljava/lang/String;)V"),
-                    "", "")));
-            find.setOpcodeOperand();
-            String replaceResult = JDBByteCode.byteCodeFindReplace(find.getOpcodeOperand(), find.getOpcodeOperand(),
-                    "00,00,000000,0000,0000,000000,000000,000000,0000,000000,0000,000000,00,000000,000000,00,000000,000000,000000,00,000000,000000,000000,000000,000000,a70011,00,00",
-                    raiseRockLevelIterator, "raiseRockLevel");
-            logger.log(Level.INFO, replaceResult);
-            raiseRockLevelAttribute.computeMaxStack();
-            raiseRockLevelMInfo.rebuildStackMapIf6(pool,cfCaveTileBehaviour);
-            */
-            }
         }
         raiseRockLevel.getCtMethod().instrument(new ExprEditor() {
             @Override
