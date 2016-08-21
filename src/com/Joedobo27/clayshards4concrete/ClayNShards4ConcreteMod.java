@@ -139,7 +139,8 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
             boolean isModifiedCheckSaneAmounts = true;
             byte[] findPoolResult;
             try {
-                findConstantPoolReference(creationEntry.getConstPool(),
+                //noinspection UnusedAssignment
+                findPoolResult = findConstantPoolReference(creationEntry.getConstPool(),
                         "// Method com/Joedobo27/common/Common.checkSaneAmountsExceptionsHook:(III)I");
             } catch (UnsupportedOperationException e){
                 isModifiedCheckSaneAmounts = false;
@@ -181,10 +182,6 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
                     }
                 });
             }
-
-            BytecodeTools.byteCodePrint("C:\\Program Files (x86)\\Steam\\SteamApps\\common\\Wurm Unlimited Dedicated Server\\byte code prints\\checkSaneAmounts bytecode.txt",
-                    checkSaneAmounts.getCodeIterator());
-            creationEntry.constantPoolPrint("C:\\Program Files (x86)\\Steam\\SteamApps\\common\\Wurm Unlimited Dedicated Server\\byte code prints\\creationEntry CP.txt");
 
             boolean changesSuccessful = !Arrays.stream(shardNClayToConcreteSuccesses).anyMatch(value -> value == 0);
             if (changesSuccessful) {
