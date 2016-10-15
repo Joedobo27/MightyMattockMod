@@ -27,7 +27,7 @@ import static com.Joedobo27.clayshards4concrete.BytecodeTools.addConstantPoolRef
 import static com.Joedobo27.clayshards4concrete.BytecodeTools.findConstantPoolReference;
 import static com.Joedobo27.clayshards4concrete.BytecodeTools.findReplaceCodeIterator;
 
-@SuppressWarnings({"Convert2Lambda", "Convert2streamapi", "unused"})
+
 public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Configurable, ServerStartedListener, ItemTemplatesCreatedListener {
 
     private static boolean shardNClayToConcrete = false;
@@ -41,14 +41,7 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
     private static double pvpDepthMultiplier = 1;
     private static double pveDepthMultiplier = 3;
 
-    private static ClassPool pool;
-    private static JAssistClassData caveTileBehaviour;
-    private static JAssistMethodData raiseRockLevel;
-
-    private static MethodInfo raiseRockLevelMInfo;
-    private static CodeAttribute raiseRockLevelAttribute;
-    private static CodeIterator raiseRockLevelIterator;
-
+    private static ClassPool classPool;
     private static final Logger logger= Logger.getLogger(ClayNShards4ConcreteMod.class.getName());
 
 
@@ -89,12 +82,8 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
 
     @Override
     public void init() {
-        pool = HookManager.getInstance().getClassPool();
         try {
-            caveTileBehaviour = new JAssistClassData("com.wurmonline.server.behaviours.CaveTileBehaviour", pool);
-            raiseRockLevel = new JAssistMethodData(caveTileBehaviour,
-                    "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z",
-                    "raiseRockLevel");
+            classPool = HookManager.getInstance().getClassPool();
 
             customSlopeDepthBytecode();
         } catch (NotFoundException | FileNotFoundException | BadBytecode | CannotCompileException e) {
@@ -102,11 +91,13 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
         }
     }
 
+    @SuppressWarnings("unused")
     public static boolean isWorkingBeyondMaxDepthHook(int h, Creature performer){
         return h >= -1 * (int)performer.getSkills().getSkillOrLearn(SkillList.MINING).getKnowledge(0.0d) *
                 (Servers.localServer.PVPSERVER ? pvpDepthMultiplier : pveDepthMultiplier);
     }
 
+    @SuppressWarnings("unused")
     public static boolean isTooSteepHook(Creature performer, int tileX, int tileY){
         com.wurmonline.server.skills.Skill miningSkill = performer.getSkills().getSkillOrLearn(SkillList.MINING);
         int slopeDown = Terraforming.getMaxSurfaceDownSlope(tileX, tileY);
@@ -117,6 +108,11 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
     private static void customSlopeDepthBytecode() throws NotFoundException, FileNotFoundException, BadBytecode, CannotCompileException {
         if (!useCustomSlopeMax && !useCustomDepthMax && !shardNClayToConcrete)
             return;
+
+        JAssistClassData caveTileBehaviour = new JAssistClassData("com.wurmonline.server.behaviours.CaveTileBehaviour", classPool);
+        JAssistMethodData raiseRockLevel = new JAssistMethodData(caveTileBehaviour,
+                "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z",
+                "raiseRockLevel");
 
         int[] shardNClayToConcreteSuccesses = new int[2];
         Arrays.fill(shardNClayToConcreteSuccesses, 0);
@@ -131,7 +127,7 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
             // In CreationEntry.checkSaneAmounts()
             // Byte code change: this.objectCreated != 73 to this.getObjectCreated() == 73
             // Do this because it's not possible to instrument on a field and have the replace function use a returned value from a hook method.
-            JAssistClassData creationEntry = new JAssistClassData("com.wurmonline.server.items.CreationEntry", pool);
+            JAssistClassData creationEntry = new JAssistClassData("com.wurmonline.server.items.CreationEntry", classPool);
             JAssistMethodData checkSaneAmounts = new JAssistMethodData(creationEntry,
                     "(Lcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/Item;ILcom/wurmonline/server/items/ItemTemplate;Lcom/wurmonline/server/creatures/Creature;Z)V",
                     "checkSaneAmounts");
@@ -175,21 +171,15 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
                     @Override
                     public void edit(MethodCall methodCall) throws CannotCompileException {
                         if (Objects.equals("getObjectCreated", methodCall.getMethodName())) {
+                            logger.log(Level.FINE, checkSaneAmounts.getCtMethod().getName() + " method,  edit call to " +
+                                    methodCall.getMethodName() + " at index " + methodCall.getLineNumber());
                             methodCall.replace("$_ = com.Joedobo27.common.Common.checkSaneAmountsExceptionsHook( $0.getObjectCreated(), sourceMax, targetMax);");
-                            logger.log(Level.FINE, "CreationEntry.class, checkSaneAmounts(), installed hook at line: " + methodCall.getLineNumber());
                             shardNClayToConcreteSuccesses[1] = 1;
                         }
                     }
                 });
             }
-
-            boolean changesSuccessful = !Arrays.stream(shardNClayToConcreteSuccesses).anyMatch(value -> value == 0);
-            if (changesSuccessful) {
-                logger.log(Level.INFO, "shardNClayToConcrete option changes SUCCESSFUL");
-            } else {
-                logger.log(Level.INFO, "shardNClayToConcrete option changes FAILURE");
-                logger.log(Level.FINE, "shardNClayToConcreteSuccesses: " + Arrays.toString(shardNClayToConcreteSuccesses));
-            }
+            evaluateChangesArray(shardNClayToConcreteSuccesses, "shardNClayToConcrete");
         }
         if (useCustomDepthMax) {
             //<editor-fold desc="Modify raiseRockLevel() in CaveTileBehaviour">
@@ -198,14 +188,14 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
                 was-
                     if (h >= -25) {
                 becomes-
-                    boolean isWorkingBeyondMaxDepth = dummy(int h, Creature performer);
+                    boolean isWorkingBeyondMaxDepth = isWorkingBeyondMaxDepth(int h, Creature performer);
                     if (isWorkingBeyondMaxDepth) {...}
-                Note- the method "dummy()" is just a place holder so the mod can instrument an expression editor on it and do the actual boolean work.
+                Note- the method "isWorkingBeyondMaxDepth()" is just a place holder so the mod can instrument an expression editor on it and do the actual boolean work.
                 */
             //</editor-fold>
 
-            CtMethod dummy = CtNewMethod.make("private static boolean dummy(){return true;}", caveTileBehaviour.getCtClass());
-            caveTileBehaviour.getCtClass().addMethod(dummy);
+            CtMethod isWorkingBeyondMaxDepth = CtNewMethod.make("private static boolean isWorkingBeyondMaxDepth(){return true;}", caveTileBehaviour.getCtClass());
+            caveTileBehaviour.getCtClass().addMethod(isWorkingBeyondMaxDepth);
 
             //raiseRockLevel.getCodeIterator().insert(766, new byte[]{0, 0, 0});
 
@@ -220,7 +210,7 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
 
             Bytecode replace = new Bytecode(caveTileBehaviour.getConstPool());
             replace.addOpcode(Opcode.INVOKESTATIC);
-            findPoolResult = addConstantPoolReference(caveTileBehaviour.getConstPool(), "// Method com/wurmonline/server/behaviours/CaveTileBehaviour.dummy:()Z");
+            findPoolResult = addConstantPoolReference(caveTileBehaviour.getConstPool(), "// Method com/wurmonline/server/behaviours/CaveTileBehaviour.isWorkingBeyondMaxDepth:()Z");
             replace.add(findPoolResult[0], findPoolResult[1]);
             replace.addOpcode(Opcode.NOP);
             replace.addOpcode(Opcode.IFEQ);
@@ -246,13 +236,13 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
                         return true;
                     }
                 becomes -
-                   boolean isTooSteep = dummy2(int h, Creature performer);
+                   boolean isTooSteep = isTooSteep(int h, Creature performer);
                     if (isTooSteep) {...}
-                Note- the method "dummy2()" is just a place holder so the mod can instrument an expression editor on it and do the actual boolean work.
+                Note- the method "isTooSteep()" is just a place holder so the mod can instrument an expression editor on it and do the actual boolean work.
                 */
             //</editor-fold>
-            CtMethod dummy2 = CtNewMethod.make("private static boolean dummy2(){return true;}", caveTileBehaviour.getCtClass());
-            caveTileBehaviour.getCtClass().addMethod(dummy2);
+            CtMethod isTooSteep = CtNewMethod.make("private static boolean isTooSteep(){return true;}", caveTileBehaviour.getCtClass());
+            caveTileBehaviour.getCtClass().addMethod(isTooSteep);
 
             byte[] findPoolResult;
             Bytecode find = new Bytecode(caveTileBehaviour.getConstPool());
@@ -288,7 +278,7 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
             Bytecode replace = new Bytecode(caveTileBehaviour.getConstPool());
             replace.addOpcode(Opcode.INVOKESTATIC);
             findPoolResult = addConstantPoolReference(caveTileBehaviour.getConstPool(),
-                    "// Method com/wurmonline/server/behaviours/CaveTileBehaviour.dummy2:()Z");
+                    "// Method com/wurmonline/server/behaviours/CaveTileBehaviour.isTooSteep:()Z");
             replace.add(findPoolResult[0], findPoolResult[1]);
             IntStream.range(1,23).forEach(v -> replace.addOpcode(Opcode.NOP)); // add 22 NOP instructions.
             replace.addOpcode(Opcode.IFEQ);
@@ -301,39 +291,25 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
         raiseRockLevel.getCtMethod().instrument(new ExprEditor() {
             @Override
             public void edit(MethodCall methodCall) throws CannotCompileException {
-                if (Objects.equals("dummy", methodCall.getMethodName())) {
+                if (Objects.equals("isWorkingBeyondMaxDepth", methodCall.getMethodName())) {
+                    logger.log(Level.FINE, raiseRockLevel.getCtMethod().getName() + " method,  edit call to " +
+                            methodCall.getMethodName() + " at index " + methodCall.getLineNumber());
                     methodCall.replace("$_ = com.Joedobo27.clayshards4concrete.ClayNShards4ConcreteMod.isWorkingBeyondMaxDepthHook(h, performer);");
                     useCustomDepthMaxSuccesses[1] = 1;
                     logger.log(Level.FINE, "Added isWorkingBeyondMaxDepthHook:" + methodCall.getLineNumber());
-                } else if (Objects.equals("dummy2", methodCall.getMethodName())) {
+                } else if (Objects.equals("isTooSteep", methodCall.getMethodName())) {
+                    logger.log(Level.FINE, raiseRockLevel.getCtMethod().getName() + " method,  edit call to " +
+                            methodCall.getMethodName() + " at index " + methodCall.getLineNumber());
                     methodCall.replace("$_ = com.Joedobo27.clayshards4concrete.ClayNShards4ConcreteMod.isTooSteepHook(performer, tilex, tiley);");
                     useCustomSlopeMaxSuccesses[1] = 1;
-                    logger.log(Level.FINE, "Added isTooSteepHook:" + methodCall.getLineNumber());
                 }
             }
         });
-
-        boolean bool = !Arrays.stream(useCustomDepthMaxSuccesses).anyMatch(value -> value == 0);
-        if (useCustomDepthMax) {
-            if (bool) {
-                logger.log(Level.INFO, "useCustomDepthMax option changes SUCCESSFUL");
-            } else {
-                logger.log(Level.INFO, "useCustomDepthMax option changes FAILURE");
-                logger.log(Level.FINE, "useCustomDepthMaxSuccesses: " + Arrays.toString(useCustomDepthMaxSuccesses));
-            }
-        }
-
-        if (useCustomSlopeMax) {
-            bool = !Arrays.stream(useCustomSlopeMaxSuccesses).anyMatch(value -> value == 0);
-            if (bool) {
-                logger.log(Level.INFO, "useCustomSlopeMax option changes SUCCESSFUL");
-            } else {
-                logger.log(Level.INFO, "useCustomSlopeMax option changes FAILURE");
-                logger.log(Level.FINE, "useCustomSlopeMaxSuccesses: " + Arrays.toString(useCustomSlopeMaxSuccesses));
-            }
-        }
+        evaluateChangesArray(useCustomDepthMaxSuccesses, "useCustomDepthMax");
+        evaluateChangesArray(useCustomSlopeMaxSuccesses, "useCustomSlopeMax");
     }
 
+    @SuppressWarnings("Convert2streamapi")
     private static void shardNClayToConcreteReflection() throws NoSuchFieldException, IllegalAccessException {
         if (!shardNClayToConcrete )
             return;
@@ -389,5 +365,15 @@ public class ClayNShards4ConcreteMod implements  WurmServerMod, Initable, Config
                 0, 18000L, concreteSpecs.get(0), concreteSpecs.get(1), concreteSpecs.get(2), -10, MiscConstants.EMPTY_BYTE_PRIMITIVE_ARRAY,
                 "model.resource.concrete.", 25.0f, concreteSpecs.get(3) * 1000, (byte) 18, 10, false, -1);
         logger.log(Level.INFO, "Concrete default item modded.");
+    }
+
+    private static void evaluateChangesArray(int[] ints, String option) {
+        boolean changesSuccessful = !Arrays.stream(ints).anyMatch(value -> value == 0);
+        if (changesSuccessful) {
+            logger.log(Level.INFO, option + " option changes SUCCESSFUL");
+        } else {
+            logger.log(Level.INFO, option + " option changes FAILURE");
+            logger.log(Level.FINE, Arrays.toString(ints));
+        }
     }
 }
