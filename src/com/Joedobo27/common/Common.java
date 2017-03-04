@@ -1,4 +1,4 @@
-package com.Joedobo27.common;
+package com.joedobo27.common;
 
 
 import java.util.ArrayList;
