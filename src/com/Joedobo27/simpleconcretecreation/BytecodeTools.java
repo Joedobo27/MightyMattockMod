@@ -30,6 +30,16 @@ class BytecodeTools {
         return table.index(tableOrdinal);
     }
 
+    static int findLineNumberInLineNumberTable(JAssistMethodData jAssistMethodData, String variableName){
+        LocalVariableAttribute table = (LocalVariableAttribute) jAssistMethodData.getCodeAttribute().getAttribute(LineNumberAttribute.tag);
+        int tableOrdinal;
+        tableOrdinal = IntStream.range(0,table.tableLength()).filter(value -> Objects.equals(table.variableName(value), variableName )).findFirst().orElse(-1);
+        if (tableOrdinal == -1){
+            return -1;
+        }
+        return table.index(tableOrdinal);
+    }
+
     static boolean findReplaceCodeIterator(CodeIterator ci, Bytecode find, Bytecode replace) throws BadBytecode {
 
         boolean toReturn = false;

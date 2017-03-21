@@ -9,7 +9,7 @@ public enum ClassPathAndMethodDescriptors {
     DIG_METHOD("", "dig",
             "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIIFLcom/wurmonline/mesh/MeshIO;)Z"),
     RAISE_ROCK_LEVEL_METHOD("", "raiseRockLevel", "(Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIFLcom/wurmonline/server/behaviours/Action;)Z"),
-    ACTION_METHOD("", "action", "(Lcom/wurmonline/server/behaviours/Action;Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIZIISF)Z"),
+    TILE_ROCK_ACTION_METHOD("", "action", "(Lcom/wurmonline/server/behaviours/Action;Lcom/wurmonline/server/creatures/Creature;Lcom/wurmonline/server/items/Item;IIZIISF)Z"),
     TILE_ROCK_BEHAVIOUR_CLASS("com.wurmonline.server.behaviours.TileRockBehaviour", "TileRockBehaviour", "");
 
     private String path;
