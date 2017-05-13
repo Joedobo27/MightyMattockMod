@@ -13,12 +13,14 @@ import javassist.expr.MethodCall;
 import org.gotti.wurmunlimited.modloader.classhooks.CodeReplacer;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
+import org.gotti.wurmunlimited.modsupport.actions.ModActions;
+
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
-public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Configurable {
+public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Configurable, ServerStartedListener {
 
     private static boolean useFixedClayElevation = false;
     private static boolean useCustomDepth = false;
@@ -27,10 +29,12 @@ public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Con
     private static boolean useCustomMaxSlope = false;
     private static float pveSlopeMultiplier = 3;
     private static float pvpSlopeMultiplier = 1;
+    private static boolean useLevelAction = false;
+    private static float minimumUnitLevelTime = 1.0f; // tenths of a second.
     private static final String[] STEAM_VERSION = new String[]{"1.3.1.3"};
     private static boolean versionCompliant = false;
 
-    private static final Logger logger= Logger.getLogger(RockSurfaceTerraformingMod.class.getName());
+    static final Logger logger = Logger.getLogger(RockSurfaceTerraformingMod.class.getName());
 
 
     @Override
@@ -43,6 +47,9 @@ public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Con
         useCustomMaxSlope = Boolean.parseBoolean(properties.getProperty("useCustomMaxSlope", Boolean.toString(useCustomMaxSlope)));
         pveSlopeMultiplier = Float.parseFloat(properties.getProperty("pveSlopeMultiplier", Float.toString(pveSlopeMultiplier)));
         pvpSlopeMultiplier = Float.parseFloat(properties.getProperty("pvpSlopeMultiplier", Float.toString(pvpSlopeMultiplier)));
+
+        useLevelAction = Boolean.parseBoolean(properties.getProperty("useLevelAction", Boolean.toString(useLevelAction)));
+        minimumUnitLevelTime = Float.parseFloat(properties.getProperty("minimumUnitLevelTime", Float.toString(minimumUnitLevelTime)));
 
         if (Arrays.stream(STEAM_VERSION)
                 .filter(s -> Objects.equals(s, properties.getProperty("steamVersion", null)))
@@ -84,6 +91,13 @@ public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Con
         } catch (NotFoundException | BadBytecode | CannotCompileException e) {
             logger.log(Level.WARNING, e.toString(), e);
         }
+    }
+
+    @Override
+    public void onServerStarted() {
+        if (!versionCompliant)
+            return;
+        ModActions.registerAction(new LevelAction());
     }
 
     private static void useFixedClayElevationBytecode() {
@@ -515,14 +529,18 @@ public class RockSurfaceTerraformingMod implements  WurmServerMod, Initable, Con
         return success;
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "WeakerAccess"})
     public static float getPveSlopeMultiplier() {
         return pveSlopeMultiplier;
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "WeakerAccess"})
     public static float getPvpSlopeMultiplier() {
         return pvpSlopeMultiplier;
+    }
+
+    public static float getMinimumUnitLevelTime() {
+        return minimumUnitLevelTime;
     }
 
     private static void evaluateChangesArray(int[] ints, String option) {

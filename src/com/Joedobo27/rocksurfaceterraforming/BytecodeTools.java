@@ -27,6 +27,13 @@ class BytecodeTools extends Bytecode {
         super(constPool);
     }
 
+    /**
+     * Look for a class in the constant pool.
+     * Throws NoMatchingConstPoolIndexException if the references isn't found.
+     *
+     * @param className String Object type. Full class name using periods.
+     * @return
+     */
     int findClassIndex(String className){
         int classReferenceIndex = getClassReferenceIndex(className);
         if (classReferenceIndex == -1)
@@ -169,6 +176,20 @@ class BytecodeTools extends Bytecode {
         return tag == ConstPool.CONST_Methodref || tag == ConstPool.CONST_Fieldref || tag == ConstPool.CONST_InterfaceMethodref;
     }
 
+    /**
+     * Often a class's name will appear twice in the constant pool. One of the occurrence is not used as a declaring class for anything.
+     * I have no idea why it's present but it can break looking up constant pool references if the unassociated one is picked. JA has a
+     * built in way of finding existent references but a underlying mechanic is that a hash map uses a string class name as a key
+     * in a hashMap. Two equal strings will overwrite each other in this case. This is part the the tools library to look for matches
+     * instead of relying on JA.
+     *
+     * 1. scan the constant pool and get the class references that match className.
+     * 2. scan again through the constant pool looking for class associations that use the references found in #1. One of the options
+     *      will have no references and illuminate that one to return the one that should be used.
+     *
+     * @param className String type object, uses full class name and periods.
+     * @return int primitive, the address in constant pool for the class matching className.
+     */
     private int getClassReferenceIndex(String className){
         return IntStream.range(1, this.getConstPool().getSize())
                 .filter(value -> this.getConstPool().getTag(value) == ConstPool.CONST_Class)
