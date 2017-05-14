@@ -15,20 +15,21 @@ import java.util.Comparator;
 import static com.wurmonline.server.skills.SkillList.*;
 
 class LevelActionData{
-    private int rockToRemove;
+    private int actionCountToDo;
     private int rockRemoved;
     private double unitActionTime;
     private double unitRockRemovalTime;
     private int lastWholeSkillUnitTime;
     private int lastWholeRockRemovalUnitTime;
     private TilePos[] tilePos;
-    private TilePos performerPos;
+    private TilePos performerTilePos;
+    private TilePos cycleTilePos;
 
 
     LevelActionData(Action action, Creature performer, Item pickAxe, int tileX, int tileY){
         TilePos targetPos = TilePos.fromXY(tileX, tileY);
         this.tilePos = new TilePos[]{targetPos, targetPos.East(), targetPos.SouthEast(), targetPos.South()};
-        this.performerPos = TilePos.fromXY(performer.getTileX(), performer.getTileY());
+        this.performerTilePos = TilePos.fromXY(performer.getTileX(), performer.getTileY());
         setBaseUnitActionTime(pickAxe, performer, action);
         this.lastWholeSkillUnitTime = 0;
         setUnitRockRemovalTime(performer);
@@ -42,36 +43,46 @@ class LevelActionData{
         this.unitRockRemovalTime = this.unitActionTime * (1 / Math.max(0.2f, performer.getSkills().getSkillOrLearn(MINING).getKnowledge(0.0) / 200.0f));
     }
 
-    TilePos getNextMineTile(){
-        int performerTileElevation = Tiles.decodeHeight(Server.surfaceMesh.getTile(performerPos.x, performerPos.y));
-        return Arrays.stream(tilePos)
-                .filter(tilePos1 -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y)) > performerTileElevation)
-                .sorted(Comparator.comparingInt((TilePos tilePos) -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos.x, tilePos.y))).reversed())
+    void getNextLevelTile(){
+        int performerTileElevation = Tiles.decodeHeight(Server.surfaceMesh.getTile(performerTilePos.x, performerTilePos.y));
+        this.cycleTilePos = Arrays.stream(tilePos)
+                .filter(tilePos1 -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y)) != performerTileElevation)
+                .sorted(Comparator.comparingInt((TilePos tilePos) -> Math.abs(Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos.x, tilePos.y))) -  performerTileElevation).reversed())
                 .findFirst()
-                .orElse(null);
+                .orElseThrow(LevelActionException::new);
+    }
+
+    boolean levelActionRequiresMine(TilePos mineTile){
+        return Tiles.decodeHeight(Server.surfaceMesh.getTile(this.performerTilePos)) < Tiles.decodeHeight(Server.surfaceMesh.getTile(mineTile));
+    }
+
+    boolean levelActionRequiresConcrete(TilePos mineTile){
+        return Tiles.decodeHeight(Server.surfaceMesh.getTile(performerTilePos)) > Tiles.decodeHeight(Server.surfaceMesh.getTile(mineTile));
     }
 
     int getTotalTime(){
-        return (int) (unitRockRemovalTime * rockToRemove);
+        return (int) (this.unitRockRemovalTime * this.actionCountToDo);
     }
 
     private void tallyTotalRockToRemove(){
-        int performerTileElevation = Tiles.decodeHeight(Server.surfaceMesh.getTile(performerPos.x, performerPos.y));
-        int totalElevationDifference = Arrays.stream(tilePos)
+        int performerTileElevation = Tiles.decodeHeight(Server.surfaceMesh.getTile(performerTilePos.x, performerTilePos.y));
+        int totalMineDownCount = Arrays.stream(this.tilePos)
                 .filter(tilePos1 -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y)) > performerTileElevation)
                 .mapToInt(tilePos1 -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y) - performerTileElevation))
                 .sum();
-        int staminaForDigs = 100;
-        // I need to figure out how stamina works so available stamina can serve as a possible cap.
-        //performer.getStatus().modifyStamina(-1000.0f);
-        //performer.getStatus().modifyStamina(-7000.0f);
-        rockToRemove = totalElevationDifference > staminaForDigs ? staminaForDigs : totalElevationDifference;
+        int totalRaiseUpCount = Arrays.stream(this.tilePos)
+                .filter(tilePos1 -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y)) < performerTileElevation)
+                .mapToInt(tilePos1 -> Tiles.decodeHeight(performerTileElevation - Server.surfaceMesh.getTile(tilePos1.x, tilePos1.y)))
+                .sum();
+        int staminaForActions = 99;
+        // I need to figure out how stamina works so available stamina can serve as a possible action count cap.
+        this.actionCountToDo = (totalMineDownCount + totalRaiseUpCount) > staminaForActions ? staminaForActions : (totalMineDownCount + totalRaiseUpCount);
     }
 
-    private TilePos getTargetTilePos(){
+    private TilePos getTargetPos(){
         if (this.tilePos.length == 4)
             return this.tilePos[0];
-        else throw new LevelActionUninitializedException();
+        else throw new LevelActionException();
     }
 
     boolean unitSkillTimeJustTicked(float counter){
@@ -83,7 +94,7 @@ class LevelActionData{
         return false;
     }
 
-    boolean unitRockRemovalTimeJustTicked(float counter){
+    boolean unitRockChangeTimeJustTicked(float counter){
         int unitTime = (int) (Math.floor((counter * 100) / (this.unitRockRemovalTime * 10)));
         if (unitTime != this.lastWholeRockRemovalUnitTime){
             this.lastWholeRockRemovalUnitTime = unitTime;
@@ -97,12 +108,15 @@ class LevelActionData{
     }
 
     public boolean isActionsUnfinished(){
-        return this.rockRemoved < this.rockToRemove;
+        return this.rockRemoved < this.actionCountToDo;
     }
 
-    class LevelActionUninitializedException extends RuntimeException{
-        LevelActionUninitializedException(){
-        }
+    public double getUnitActionTime() {
+        return unitActionTime;
+    }
+
+    public TilePos getCycleTilePos() {
+        return this.cycleTilePos;
     }
 
     /**
@@ -134,6 +148,6 @@ class LevelActionData{
         // rune effects
         if (pickAxe != null && pickAxe.getSpellEffects() != null && pickAxe.getSpellEffects().getRuneEffect() != -10L)
             time = Math.max(MINIMUM_TIME, time * (1 - RuneUtilities.getModifier(pickAxe.getSpellEffects().getRuneEffect(), RuneUtilities.ModifierEffect.ENCH_USESPEED)));
-        unitActionTime = time;
+        this.unitActionTime = time;
     }
 }

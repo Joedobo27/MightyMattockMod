@@ -20,6 +20,7 @@ import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import static com.wurmonline.server.skills.SkillList.*;
 
 import java.util.*;
+import java.util.function.ToIntFunction;
 
 public class LevelAction implements ModAction, BehaviourProvider, ActionPerformer {
     private final ActionEntry actionEntry;
@@ -44,7 +45,7 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
 
     @Override
     public List<ActionEntry> getBehavioursFor(Creature performer, Item source, int tileX, int tileY, boolean onSurface, int encodedTile) {
-        if (isLevelOrFlattenTool(source) || isTargetingSurfaceRock(encodedTile)){
+        if (source.isMiningtool() || isTargetedSurfaceRock(encodedTile)){
             return Collections.singletonList(actionEntry);
         }
         else
@@ -58,7 +59,7 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
 
     @Override
     public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset, int encodedTile, short aActionId, float counter) {
-        if (isLevelOrFlattenTool(source) || isTargetingSurfaceRock(encodedTile)){
+        if (source.isMiningtool() || isTargetedSurfaceRock(encodedTile)){
             final float ACTION_START_TIME = 1.0f;
             final float TIME_TO_COUNTER_DIVISOR = 10.0f;
             String youMessage;
@@ -77,6 +78,7 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
                 Server.getInstance().broadCastAction(broadcastMessage, performer, 5);
                 action.setTimeLeft(levelActionData.getTotalTime());
                 performer.sendActionControl(action.getActionEntry().getVerbString(), true, levelActionData.getTotalTime());
+                performer.getStatus().modifyStamina(-1000.0f);
                 return false;
             }
             time = action.getTimeLeft();
@@ -85,50 +87,65 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
             if (levelActionData.unitSkillTimeJustTicked(counter) && isTimeLeft && levelActionData.isActionsUnfinished()) {
                 double bonus;
                 try {
-                    bonus = performer.getSkills().getSkillOrLearn(source.getPrimarySkill()).skillCheck(1.0, source, 0.0, false, counter) / 5.0;
+                    bonus = performer.getSkills().getSkillOrLearn(source.getPrimarySkill()).skillCheck(1.0, source, 0.0, false, (float)levelActionData.getUnitActionTime()) / 5.0;
                 } catch (NoSuchSkillException e){
                     bonus = 0;
                 }
-                performer.getSkills().getSkillOrLearn(MINING).skillCheck(1, source, bonus, false, counter);
+                performer.getSkills().getSkillOrLearn(MINING).skillCheck(1, source, bonus, false, (float)levelActionData.getUnitActionTime());
             }
-            if (levelActionData.unitRockRemovalTimeJustTicked(counter) && isTimeLeft && levelActionData.isActionsUnfinished()){
+            if (levelActionData.unitRockChangeTimeJustTicked(counter) && isTimeLeft && levelActionData.isActionsUnfinished()){
                 if (hasAFailureCondition(performer, source, tileX, tileY, onSurface, heightOffset, encodedTile, aActionId, counter))
                     return true;
-                TilePos mineTile = levelActionData.getNextMineTile();
-                double quality = Math.min(getSkillDerivedQl(performer, source), getTileQlCap(mineTile, source));
-                if (source.isCrude()) {
-                    quality = 1.0;
-                }
-                float modifier = 1.0f;
-                if (source.getSpellEffects() != null && source.getSpellEffects().getRuneEffect() != -10L) {
-                    modifier += RuneUtilities.getModifier(source.getSpellEffects().getRuneEffect(), RuneUtilities.ModifierEffect.ENCH_RESGATHERED);
-                }
-                float orePower = GeneralUtilities.calcOreRareQuality(quality * modifier, action.getRarity(), source.getRarity());
-                Item minedItem;
-                try{
-                    minedItem = ItemFactory.createItem(ItemList.rock, orePower, action.getRarity(), null);
-                }catch(FailedException | NoSuchTemplateException e){
+                try {
+                    levelActionData.getNextLevelTile();
+                }catch (LevelActionException e){
                     RockSurfaceTerraformingMod.logger.warning(e.getMessage());
                     performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
                     return true;
                 }
-                minedItem.setLastOwnerId(performer.getWurmId());
-                minedItem.setDataXY(mineTile.x, mineTile.y);
-                try{
-                    minedItem.putItemInfrontof(performer, 0.0f);
-                }catch(NoSuchCreatureException | NoSuchItemException | NoSuchPlayerException | NoSuchZoneException e){
-                    RockSurfaceTerraformingMod.logger.warning(e.getMessage());
-                    minedItem.setWeight(0, true); // destroy the created item.
+                if (levelActionData.levelActionRequiresMine(levelActionData.getCycleTilePos())) {
+                    double quality = Math.min(getSkillDerivedQl(performer, source), getTileQlCap(levelActionData.getCycleTilePos(), source));
+                    if (source.isCrude()) {
+                        quality = 1.0;
+                    }
+                    float modifier = 1.0f;
+                    if (source.getSpellEffects() != null && source.getSpellEffects().getRuneEffect() != -10L) {
+                        modifier += RuneUtilities.getModifier(source.getSpellEffects().getRuneEffect(), RuneUtilities.ModifierEffect.ENCH_RESGATHERED);
+                    }
+                    float orePower = GeneralUtilities.calcOreRareQuality(quality * modifier, action.getRarity(), source.getRarity());
+
+                    Item minedItem;
+                    try {
+                        minedItem = ItemFactory.createItem(ItemList.rock, orePower, action.getRarity(), null);
+                    } catch(FailedException | NoSuchTemplateException e){
+                        RockSurfaceTerraformingMod.logger.warning(e.getMessage());
+                        performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
+                        return true;
+                    }
+                    minedItem.setLastOwnerId(performer.getWurmId());
+                    minedItem.setDataXY(levelActionData.getCycleTilePos().x, levelActionData.getCycleTilePos().y);
+                    try{
+                        minedItem.putItemInfrontof(performer, 0.0f);
+                    }catch(NoSuchCreatureException | NoSuchItemException | NoSuchPlayerException | NoSuchZoneException e){
+                        RockSurfaceTerraformingMod.logger.warning(e.getMessage());
+                        minedItem.setWeight(0, true); // destroy the created item.
+                        performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
+                        return true;
+                    }
+
+                    removeOneRock(levelActionData.getCycleTilePos(), performer, minedItem);
+                    invokeCreateGem(levelActionData.getCycleTilePos().x, levelActionData.getCycleTilePos().y, performer, quality, true, action);
+                }
+                else if (levelActionData.levelActionRequiresConcrete(levelActionData.getCycleTilePos())){
+                    applyOneConcrete(levelActionData.getCycleTilePos(), performer);
+                }
+                else {
+                    RockSurfaceTerraformingMod.logger.warning("LevelAction() somehow doesn't require pick or concrete.");
                     performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
                     return true;
                 }
-                youMessage = String.format("You mine some %s.", minedItem.getName());
-                broadcastMessage = String.format("%s mines some %s.", performer.getName(), minedItem.getName());
-                performer.getCommunicator().sendNormalServerMessage(youMessage);
-                Server.getInstance().broadCastAction(broadcastMessage, performer, 5);
-                invokeCreateGem(mineTile.x, mineTile.y, performer, quality, true, action);
-                removeOneRock(mineTile, performer);
                 levelActionData.incrementActionsDone();
+                performer.getStatus().modifyStamina(-7000.0f);
                 return false;
             }
             if (!isTimeLeft && !levelActionData.isActionsUnfinished()){
@@ -139,12 +156,36 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
         return false;
     }
 
-    private void removeOneRock(TilePos mineTile, Creature performer){
+    private void applyOneConcrete(TilePos mineTile, Creature performer){
+        Item concrete = Arrays.stream(performer.getAllItems())
+                .filter(item -> item.getTemplateId() == ItemList.concrete)
+                .filter(item -> item.getWeightGrams() >= item.getTemplate().getWeightGrams())
+                .sorted(Comparator.comparingInt((ToIntFunction<Item>) Item::getWeightGrams).reversed())
+                .findFirst()
+                .orElseThrow(LevelActionException::new);
+        concrete.setWeight(concrete.getWeightGrams() - concrete.getTemplate().getWeightGrams(), true);
+
+        short currentHeight = Tiles.decodeHeight(Server.surfaceMesh.getTile(mineTile));
+        Server.surfaceMesh.setTile(mineTile.x, mineTile.y, Tiles.encode(++currentHeight, Tiles.Tile.TILE_ROCK.id,
+                Tiles.decodeData(Server.surfaceMesh.getTile(mineTile))));
+        Server.rockMesh.setTile(mineTile.x, mineTile.y, Tiles.encode(++currentHeight, (short)0));
+        Players.getInstance().sendChangedTile(mineTile.x, mineTile.y, performer.isOnSurface(), true);
+        String youMessage = String.format("You apply some %s.", concrete.getName());
+        String broadcastMessage = String.format("%s applies some %s.", performer.getName(), concrete.getName());
+        performer.getCommunicator().sendNormalServerMessage(youMessage);
+        Server.getInstance().broadCastAction(broadcastMessage, performer, 5);
+    }
+
+    private void removeOneRock(TilePos mineTile, Creature performer, Item minedItem){
         short currentHeight = Tiles.decodeHeight(Server.surfaceMesh.getTile(mineTile));
         Server.surfaceMesh.setTile(mineTile.x, mineTile.y, Tiles.encode(--currentHeight, Tiles.Tile.TILE_ROCK.id,
                 Tiles.decodeData(Server.surfaceMesh.getTile(mineTile))));
         Server.rockMesh.setTile(mineTile.x, mineTile.y, Tiles.encode(--currentHeight, (short)0));
         Players.getInstance().sendChangedTile(mineTile.x, mineTile.y, performer.isOnSurface(), true);
+        String youMessage = String.format("You mine some %s.", minedItem.getName());
+        String broadcastMessage = String.format("%s mines some %s.", performer.getName(), minedItem.getName());
+        performer.getCommunicator().sendNormalServerMessage(youMessage);
+        Server.getInstance().broadCastAction(broadcastMessage, performer, 5);
     }
 
     /**
@@ -192,11 +233,7 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
 
     }
 
-    private static boolean isLevelOrFlattenTool(Item item){
-        return item.isMiningtool() || item.getTemplateId() == ItemList.concrete;
-    }
-
-    private static boolean isTargetingSurfaceRock(int encodedTile){
+    private static boolean isTargetedSurfaceRock(int encodedTile){
         return Tiles.decodeTileData(encodedTile) == Tiles.Tile.TILE_ROCK.id || Tiles.decodeTileData(encodedTile) == Tiles.Tile.TILE_CLIFF.id;
     }
 
@@ -207,6 +244,35 @@ public class LevelAction implements ModAction, BehaviourProvider, ActionPerforme
         TilePos[] adjacentTilePos = new TilePos[]{targetTilePos.North(), targetTilePos.NorthEast(), targetTilePos.East(),
                 targetTilePos.SouthEast(),targetTilePos.South(), targetTilePos.SouthWest(), targetTilePos.West(), targetTilePos.NorthWest()};
 
+        boolean performerTileIsNotFlat = Arrays.stream(new TilePos[]{performerTilePos.East(), performerTilePos.SouthEast(),
+                performerTilePos.South()})
+                .filter(tilePos -> Tiles.decodeHeight(Server.surfaceMesh.getTile(tilePos)) != Tiles.decodeHeight(
+                        Server.surfaceMesh.getTile(performerTilePos)))
+                .count() > 0;
+        if (performerTileIsNotFlat) {
+            performer.getCommunicator().sendNormalServerMessage("The tile you're standing on needs to be flat.");
+            return true;
+        }
+        if (performer.getStatus().getStamina() < 6000) {
+            performer.getCommunicator().sendNormalServerMessage("You don't have enough stamina to start or continue leveling.");
+            return true;
+        }
+        boolean someTilesNotRock = Arrays.stream(adjacentTilePos)
+                .filter(tilePos -> Tiles.decodeType(Server.surfaceMesh.getTile(tilePos)) != Tiles.Tile.TILE_ROCK.getId())
+                .filter(tilePos -> Tiles.decodeType(Server.surfaceMesh.getTile(tilePos)) != Tiles.Tile.TILE_CLIFF.getId())
+                .count() > 0;
+        if (someTilesNotRock) {
+            performer.getCommunicator().sendNormalServerMessage("The target tile and its surrounding eight tiles need to be rock.", (byte)3);
+            return true;
+        }
+        boolean hasNoConcrete = Arrays.stream(performer.getAllItems())
+                .filter(item -> item.getTemplateId() == ItemList.concrete)
+                .filter(item -> item.getWeightGrams() >= item.getTemplate().getWeightGrams())
+                .count() == 0;
+        if (hasNoConcrete){
+            performer.getCommunicator().sendNormalServerMessage("You need at least one whole unit of concrete to attempt leveling.", (byte)3);
+            return true;
+        }
         boolean isTooFarAway = Arrays.stream(adjacentTilePos)
                 .filter(tilePos -> tilePos.equals(performerTilePos))
                 .count() == 0;
