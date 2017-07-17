@@ -1,12 +1,5 @@
 # RockSurfaceTerraformingMod
-This is a mod for the game Wurm Unlimited. It changes how a player can terraform rock.
-
-:Required:
-Ago's WurmServerModLauncher. https://github.com/ago1024/WurmServerModLauncher/releases
-
-:Install:
-Get one of the archive releases and unpack it into the mods folder. The folder path should look something like this:
-~Steam\SteamApps\common\Wurm Unlimited Dedicated Server\mods
+No more public releases for this and I may or may not update the source to work with future version of WU. It's too much work for me to keep up with WU updates for the bytecode alteration style of moding this mod does. You're free to fork this and make your own version if you want.
 
 :Mod's forum post:
 http://forum.wurmonline.com/index.php?/topic/138311-beta-rock-surface-terraforming-mod/
