@@ -1,0 +1,80 @@
+
+apply plugin: 'java'
+apply plugin: 'distribution'
+
+group 'com.joedobo27'
+version '1.0'
+sourceCompatibility = 1.8
+
+def WUServerPath = "C:\\Users\\Jason\\Documents\\WU\\WU-Server\\"
+def jdbCommonPath = "C:\\Users\\Jason\\IdeaProjects\\jdbCommon\\build\\libs\\"
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+
+    compile files("${jdbCommonPath}jdbCommon-1.0.jar")
+    compileOnly files("${WUServerPath}common.jar")
+    compileOnly files("${WUServerPath}server.jar")
+    compileOnly files("${WUServerPath}modlauncher.jar")
+
+    // https://mvnrepository.com/artifact/junit/junit
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    // https://mvnrepository.com/artifact/org.javassist/javassist
+    compileOnly group: 'org.javassist', name: 'javassist', version: '3.20.0-GA'
+    // https://mvnrepository.com/artifact/com.intellij/annotations
+    compile group: 'com.intellij', name: 'annotations', version: '12.0'
+    // https://mvnrepository.com/artifact/javax.json/javax.json-api
+    // compile group: 'javax.json', name: 'javax.json-api', version: '1.0'
+    // https://mvnrepository.com/artifact/org.glassfish/javax.json
+    compile group: 'org.glassfish', name: 'javax.json', version: '1.0.4'
+
+}
+
+jar.setArchiveName(project.name + ".jar")
+distZip.doFirst {
+    delete (file("${distZip.destinationDir}/${project.name}-${version}.zip"))
+}
+distZip.dependsOn(jar)
+distZip.mustRunAfter(jar)
+
+
+// The distZip automatically adds a sub-folder with the same name as the zip. In order to directly unpack the
+// archive into WU server folder it needs to have a folder named "mods" as its first sub-folder. After much effort I ended up with
+// this weird "hack" approach to get the right directory structure.
+distZip.setArchiveName("mods.zip")
+distZip.doLast {
+    file("${distZip.destinationDir}/mods.zip").renameTo("${distZip.destinationDir}/${project.name}-${version}.zip")
+}
+
+distributions {
+    main {
+        contents {
+            from('src/main/resources/') {
+                include("*.properties")
+            }
+            from ('build/libs/') {
+                include("${project.name}.jar")
+                into(project.name+"/")
+            }
+            from ('build/libs/'){
+                exclude("${project.name}.jar")
+                include("*.jar")
+                into("${project.name}/libs/")
+            }
+        }
+    }
+}
+
+task dist(type: Copy) {
+    from configurations.runtime {
+        exclude("annotations*")
+    }
+    into "$buildDir/libs"
+}
+build.dependsOn(dist)
+dist.mustRunAfter(jar)
+distZip.dependsOn(dist)
