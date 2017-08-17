@@ -1,4 +1,6 @@
-import com.joedobo27.libs.ActionUtilities;
+package com.joedobo27.mmm;
+
+import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.behaviours.Actions;
 import com.wurmonline.server.items.*;
 import com.wurmonline.server.skills.SkillList;
@@ -11,6 +13,7 @@ import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
 import org.gotti.wurmunlimited.modsupport.IdType;
 import org.gotti.wurmunlimited.modsupport.ItemTemplateBuilder;
+import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.io.IOException;
@@ -20,6 +23,11 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.joedobo27.libs.action.ActionMaster.setActionEntryMaxRangeReflect;
+import static com.joedobo27.libs.action.ActionTypes.ACTION_FATIGUE;
+import static com.joedobo27.libs.action.ActionTypes.ACTION_POLICED;
+import static com.joedobo27.libs.action.ActionTypes.ACTION_SHOW_ON_SELECT_BAR;
 
 
 public class MightyMattockMod implements  WurmServerMod, Initable, Configurable, ServerStartedListener, ItemTemplatesCreatedListener {
@@ -35,6 +43,8 @@ public class MightyMattockMod implements  WurmServerMod, Initable, Configurable,
     private static float minimumUnitLevelTime = 1.0f; // tenths of a second.
     private static int pickMattockHeadTemplateID;
     private static int pickMattockTemplateID;
+    private static int raiseDirtEntryId;
+    private static int raiseRockEntryId;
 
     static final Logger logger = Logger.getLogger(MightyMattockMod.class.getName());
     static Random r = new Random();
@@ -66,24 +76,34 @@ public class MightyMattockMod implements  WurmServerMod, Initable, Configurable,
     @Override
     public void onServerStarted() {
 
-        LevelAction levelAction = new LevelAction(Actions.LEVEL, Actions.actionEntrys[Actions.LEVEL]);
-        ModActions.registerAction(levelAction);
-        ActionUtilities.maxRangeReflect(Actions.actionEntrys[Actions.LEVEL], 6, logger);
+        DigAction digAction = new DigAction(Actions.DIG, Actions.actionEntrys[Actions.DIG]);
+        ModActions.registerAction(digAction);
+        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.DIG], 8, logger);
+
+        raiseDirtEntryId = ModActions.getNextActionId();
+        ActionEntry actionEntryRaiseDirt = ActionEntry.createEntry((short)raiseDirtEntryId, "raise dirt",
+                "raising dirt", new int[]{ACTION_FATIGUE.getId(), ACTION_POLICED.getId(), ACTION_SHOW_ON_SELECT_BAR.getId()});
+        ModActions.registerAction(actionEntryRaiseDirt);
+        RaiseDirtAction raiseDirtAction = new RaiseDirtAction(raiseDirtEntryId, actionEntryRaiseDirt);
+        ModActions.registerAction(raiseDirtAction);
+        setActionEntryMaxRangeReflect(actionEntryRaiseDirt, 8, logger);
+
+        //LevelAction levelAction = new LevelAction(Actions.LEVEL, Actions.actionEntrys[Actions.LEVEL]);
+        //ModActions.registerAction(levelAction);
+        //setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.LEVEL], 8, logger);
 
         MineAction mineAction = new MineAction(Actions.MINE, Actions.actionEntrys[Actions.MINE]);
         ModActions.registerAction(mineAction);
-        ActionUtilities.maxRangeReflect(Actions.actionEntrys[Actions.MINE], 6, logger);
+        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.MINE], 8, logger);
 
-        RaiseRockAction raiseRockAction = new RaiseRockAction(Actions.RAISE_GROUND, Actions.actionEntrys[Actions.RAISE_GROUND]);
+        raiseRockEntryId = ModActions.getNextActionId();
+        ActionEntry actionEntryRaiseRock = ActionEntry.createEntry((short)raiseRockEntryId, "raise rock",
+                "raising rock", new int[]{ACTION_FATIGUE.getId(), ACTION_POLICED.getId(), ACTION_SHOW_ON_SELECT_BAR.getId()});
+        ModActions.registerAction(actionEntryRaiseRock);
+        RaiseRockAction raiseRockAction = new RaiseRockAction(raiseRockEntryId, actionEntryRaiseRock);
         ModActions.registerAction(raiseRockAction);
-        ActionUtilities.maxRangeReflect(Actions.actionEntrys[Actions.RAISE_GROUND], 6, logger);
+        setActionEntryMaxRangeReflect(actionEntryRaiseRock, 8, logger);
 
-        DigAction digAction = new DigAction(Actions.DIG, Actions.actionEntrys[Actions.DIG]);
-        ModActions.registerAction(digAction);
-        ActionUtilities.maxRangeReflect(Actions.actionEntrys[Actions.DIG], 6, logger);
-
-        RaiseDirtAction raiseDirtAction = new RaiseDirtAction(Actions.RAISE_GROUND, Actions.actionEntrys[Actions.RAISE_GROUND]);
-        ModActions.registerAction(raiseDirtAction);
 
         CreationEntryCreator.createSimpleEntry(SkillList.SMITHING_BLACKSMITHING,
                 ItemList.anvilLarge, ItemList.ironBar, pickMattockHeadTemplateID, false, true, 0.0f, false, false,
@@ -186,6 +206,14 @@ public class MightyMattockMod implements  WurmServerMod, Initable, Configurable,
             logger.info(e.getMessage());
         }
         evaluateChangesArray(successes, "useFixedClayElevation");
+    }
+
+    static int getRaiseDirtEntryId() {
+        return raiseDirtEntryId;
+    }
+
+    static int getRaiseRockEntryId() {
+        return raiseRockEntryId;
     }
 
     @SuppressWarnings({"unused", "WeakerAccess"})
