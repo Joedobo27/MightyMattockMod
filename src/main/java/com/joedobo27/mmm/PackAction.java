@@ -1,7 +1,8 @@
 package com.joedobo27.mmm;
 
+import com.joedobo27.libs.TileUtilities;
 import com.joedobo27.libs.action.ActionMaster;
-import com.wurmonline.mesh.Tiles;
+import com.wurmonline.math.TilePos;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
@@ -16,80 +17,69 @@ import java.util.function.Function;
 import static com.joedobo27.libs.action.ActionFailureFunction.*;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
+class PackAction implements ModAction, ActionPerformer {
 
-public class MineAction implements ModAction, ActionPerformer {
     private final ActionEntry actionEntry;
-    private final short actionId;
+    private final int actionId;
 
-    MineAction(short actionId, ActionEntry actionEntry) {
+    PackAction(int actionId, ActionEntry actionEntry) {
         this.actionId = actionId;
         this.actionEntry = actionEntry;
     }
 
     @Override
     public short getActionId() {
-        return actionId;
+        return (short)this.actionId;
     }
 
     @Override
     public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface,
-                          int heightOffset, Tiles.TileBorderDirection borderDirection, long borderId, short actionId,
-                          float counter) {
-        if (actionId != this.actionId || !TerraformBehaviours.isMattock(source))
+                          int heightOffset, int encodedTile, short actionId, float counter) {
+        if (!TerraformBehaviours.isMattock(source) || !TileUtilities.isPackable(TilePos.fromXY(tileX, tileY))) {
             return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
+        }
 
-        MineTerraformer mineTerraformer;
-        if (!MineTerraformer.hashMapHasInstance(action)) {
+        PackTerraformer packTerraformer;
+        if (!PackTerraformer.hashMapHasInstance(action)) {
             ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
+
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_ACTION));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_ROCK_MESH_AND_CAVE_CEILING_TOO_CLOSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_CORNER_OCCUPIED_BY_FENCE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_HOUSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_BRIDGE_SUPPORT));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_BRIDGE_EXIT));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_CAVE_ENTRANCE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_CAVE_ENTRANCE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_CAVE_ENTRANCE_BORDER));
 
-            ConfigureActionOptions options = ConfigureOptions.getInstance().getMineActionOptions();
-            mineTerraformer = new MineTerraformer(action, performer, source, SkillList.MINING, options.getMinSkill(),
+            ConfigureActionOptions options = ConfigureOptions.getInstance().getPackActionOptions();
+            packTerraformer = new PackTerraformer(action, performer, source, SkillList.DIGGING, options.getMinSkill(),
                                                   options.getMaxSkill(), options.getLongestTime(),
                                                   options.getShortestTime(), options.getMinimumStamina(),
-                                                  failureTestFunctions, TerraformBehaviours.getOpposingCorner(
-                                                          performer, tileX, tileY, borderDirection), onSurface);
+                                                  failureTestFunctions, TilePos.fromXY(tileX, tileY));
         }
         else
-            mineTerraformer = MineTerraformer.actionDataWeakHashMap.get(action);
+            packTerraformer = PackTerraformer.actionDataWeakHashMap.get(action);
 
-        if(mineTerraformer.isActionStartTime(counter) && mineTerraformer.hasAFailureCondition())
+        if(packTerraformer.isActionStartTime(counter) && packTerraformer.hasAFailureCondition())
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
-        if (mineTerraformer.isActionStartTime(counter)) {
-            mineTerraformer.doActionStartMessages();
-            mineTerraformer.setInitialTime(this.actionEntry);
+        if (packTerraformer.isActionStartTime(counter)) {
+            packTerraformer.doActionStartMessages();
+            packTerraformer.setInitialTime(this.actionEntry);
             source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
             performer.getStatus().modifyStamina(-1000.0f);
             return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
         }
 
-        if (!mineTerraformer.isActionTimedOut(action, counter))
+        if (!packTerraformer.isActionTimedOut(action, counter))
             return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
-        if (mineTerraformer.hasAFailureCondition())
+        if (packTerraformer.hasAFailureCondition())
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
-        mineTerraformer.modifyHeight(-1);
-        mineTerraformer.shouldMutableBeDirt();
-        double power = mineTerraformer.doSkillCheckAndGetPower(counter);
+        packTerraformer.packTile();
+        packTerraformer.doSkillCheckAndGetPower(counter);
         source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
         performer.getStatus().modifyStamina(-5000.0f);
-        mineTerraformer.makeMinedItemOnGround(power);
-        mineTerraformer.doActionEndMessages();
+        packTerraformer.doActionEndMessages();
         return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
     }
-
 }
