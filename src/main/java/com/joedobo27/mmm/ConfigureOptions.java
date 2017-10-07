@@ -99,6 +99,9 @@ class ConfigureOptions {
         int longestTime = jsonValues.getInt("longestTime", 100);
         int shortestTime = jsonValues.getInt("shortestTime", 10);
         int minimumStamina = jsonValues.getInt("minimumStamina", 6000);
+        if (jsonReader != null) {
+            jsonReader.close();
+        }
         return new ConfigureActionOptions(minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
     }
 

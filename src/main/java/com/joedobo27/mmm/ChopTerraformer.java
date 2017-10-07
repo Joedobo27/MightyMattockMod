@@ -2,24 +2,24 @@ package com.joedobo27.mmm;
 
 
 import com.joedobo27.libs.TileUtilities;
-import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.BushData;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.mesh.TreeData;
 import com.wurmonline.server.FailedException;
+import com.wurmonline.server.Players;
 import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.*;
-import com.wurmonline.server.skills.SkillList;
+import com.wurmonline.server.zones.Zone;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.WeakHashMap;
 import java.util.function.Function;
 
-class ChopTerraformer extends ActionMaster {
+class ChopTerraformer extends MightyMattockAction {
 
     private final TilePos targetedTile;
 
@@ -27,7 +27,7 @@ class ChopTerraformer extends ActionMaster {
 
     ChopTerraformer(Action action, Creature performer, @Nullable Item activeTool, int usedSkill, int minSkill,
                     int maxSkill, int longestTime, int shortestTime, int minimumStamina,
-                    ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetedTile) {
+                    ArrayList<Function<MightyMattockAction, Boolean>> failureTestFunctions, TilePos targetedTile) {
 
         super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina,
                 failureTestFunctions);
@@ -40,7 +40,7 @@ class ChopTerraformer extends ActionMaster {
     }
 
     boolean hasAFailureCondition() {
-        return failureTestFunctions.stream()
+        return this.getFailureTestFunctions().stream()
                 .anyMatch(function -> function.apply(this));
     }
 
@@ -65,7 +65,13 @@ class ChopTerraformer extends ActionMaster {
     }
 
     void alterTileState() {
-        //TODO change tile to grass. remember flags, surfaceMesh, and ??resourceMesh??
+        TileUtilities.setSurfaceTypeId(this.targetedTile, Tiles.TILE_TYPE_DIRT);
+        Server.modifyFlagsByTileType(this.targetedTile.x, this.targetedTile.y, Tiles.Tile.TILE_DIRT.id);
+        this.performer.getMovementScheme().touchFreeMoveCounter();
+        Players.getInstance().sendChangedTile(this.targetedTile.x, this.targetedTile.y, performer.isOnSurface(), true);
+        Zone zone = TileUtilities.getZoneSafe(this.targetedTile, this.performer.isOnSurface());
+        if (zone != null)
+            zone.changeTile(this.targetedTile.x, this.targetedTile.y);
     }
 
     @SuppressWarnings("UnusedReturnValue")
@@ -82,7 +88,6 @@ class ChopTerraformer extends ActionMaster {
         double rarityModifier = this.activeTool == null ? 0 : this.activeTool.getRarity();
 
         byte material;
-        Tiles.Tile tileType = TileUtilities.getSurfaceType(this.targetedTile);
         TreeData.TreeType treeType = TileUtilities.getTreeType(this.targetedTile);
         if (treeType == null) {
             this.performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
@@ -109,19 +114,12 @@ class ChopTerraformer extends ActionMaster {
         if (weight < 1500) {
             itemTemplateId = ItemList.scrapwood;
         }
-
+        float rotation = (this.getPerformer().getStatus().getRotation() + 90) % 360;
         Item created = null;
         try {
-            Item newItem = ItemFactory.createItem(itemTemplateId, Math.min(100.0f, (float)power),
-                    2f + (4f * this.targetedTile.x), 2f + (4f * this.targetedTile.y),
-                                                  Server.rand.nextInt(360), this.performer.isOnSurface(), material, this.action.getRarity(),
-                                                  -10L, null, treeAge
-                                                 );
             created = ItemFactory.createItem(itemTemplateId,
-                    Math.min((float) (power + rarityModifier) * runeModifier, 100.0f),
-                    (this.targetedTile.x * 4) + 2,
-                    (this.targetedTile.y * 4) + 2,
-                    Server.rand.nextFloat() * 360.0f, performer.isOnSurface(), material, action.getRarity(),
+                    Math.min((float) (power + rarityModifier) * runeModifier, 100.0f),(this.targetedTile.x * 4) + 2,
+                    (this.targetedTile.y * 4) + 2, rotation, performer.isOnSurface(), material, action.getRarity(),
                     -10L, null, treeAge);
         }catch (NoSuchTemplateException | FailedException ignored){}
         if (created == null) {
@@ -137,6 +135,16 @@ class ChopTerraformer extends ActionMaster {
     @Override
     public TilePos getTargetTile() {
         return this.targetedTile;
+    }
+
+    @Override
+    Item getTargetItem() {
+        return null;
+    }
+
+    @Override
+    public Item getActiveTool() {
+        return activeTool;
     }
 
     private ItemTemplate getItemTemplate(int itemTemplateId) {

@@ -1,7 +1,6 @@
 package com.joedobo27.mmm;
 
 import com.joedobo27.libs.TileUtilities;
-import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.server.behaviours.Action;
 import com.wurmonline.server.behaviours.ActionEntry;
@@ -14,7 +13,7 @@ import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import java.util.ArrayList;
 import java.util.function.Function;
 
-import static com.joedobo27.libs.action.ActionFailureFunction.*;
+import static com.joedobo27.mmm.ActionFailureFunction.*;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
 public class CollectResourceAction implements ModAction, ActionPerformer {
@@ -39,7 +38,7 @@ public class CollectResourceAction implements ModAction, ActionPerformer {
         }
         CollectResourceTerraformer collectResourceTerraformer;
         if (!CollectResourceTerraformer.hashMapHasInstance(action)){
-            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
+            ArrayList<Function<MightyMattockAction, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));

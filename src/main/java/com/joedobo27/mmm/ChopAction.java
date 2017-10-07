@@ -1,7 +1,6 @@
 package com.joedobo27.mmm;
 
 import com.joedobo27.libs.TileUtilities;
-import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.server.behaviours.Action;
@@ -15,7 +14,7 @@ import org.gotti.wurmunlimited.modsupport.actions.ModAction;
 import java.util.ArrayList;
 import java.util.function.Function;
 
-import static com.joedobo27.libs.action.ActionFailureFunction.*;
+import static com.joedobo27.mmm.ActionFailureFunction.*;
 import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
 
 public class ChopAction implements ModAction, ActionPerformer {
@@ -47,7 +46,7 @@ public class ChopAction implements ModAction, ActionPerformer {
 
         ChopTerraformer chopTerraformer;
         if (!ChopTerraformer.hashMapHasInstance(action)) {
-            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
+            ArrayList<Function<MightyMattockAction, Boolean>> failureTestFunctions = new ArrayList<>();
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
             failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));
@@ -82,8 +81,8 @@ public class ChopAction implements ModAction, ActionPerformer {
             return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
 
         double power = chopTerraformer.doSkillCheckAndGetPower(counter);
-        chopTerraformer.alterTileState();
         chopTerraformer.makeFelledTreeOnGround(power);
+        chopTerraformer.alterTileState();
         activeItem.setDamage(activeItem.getDamage() + 0.0015f * activeItem.getDamageModifier());
         performer.getStatus().modifyStamina(-5000.0f);
         chopTerraformer.doActionEndMessages();

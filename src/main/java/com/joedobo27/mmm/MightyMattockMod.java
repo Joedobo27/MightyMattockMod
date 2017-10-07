@@ -9,6 +9,12 @@ import com.wurmonline.server.items.ItemList;
 import com.wurmonline.server.items.ItemTypes;
 import com.wurmonline.server.skills.SkillList;
 import com.wurmonline.shared.constants.ItemMaterials;
+import javassist.*;
+import javassist.bytecode.Descriptor;
+import javassist.expr.ExprEditor;
+import javassist.expr.FieldAccess;
+import javassist.tools.reflect.CannotReflectException;
+import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
 import org.gotti.wurmunlimited.modsupport.IdType;
@@ -16,6 +22,7 @@ import org.gotti.wurmunlimited.modsupport.ItemTemplateBuilder;
 import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -59,6 +66,46 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
 
     @Override
     public void preInit() {
+        try {
+            CtClass returnType = HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.ItemTemplate");
+            // int templateId, int size, String name, String plural, String itemDescriptionSuperb,
+            // String itemDescriptionNormal, String itemDescriptionBad, String itemDescriptionRotten,
+            // String itemDescriptionLong, short[] itemTypes, short imageNumber, short behaviourType, int combatDamage,
+            // long decayTime, int centimetersX, int centimetersY, int centimetersZ, int primarySkill, byte[] bodySpaces,
+            // String modelName, float difficulty, int weight, byte material, int value, boolean isTraded, int armourType,
+            // int dyeAmountOverrideGrams
+            CtClass[] paramTypes = {
+                    CtPrimitiveType.intType, CtPrimitiveType.intType,
+                    HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.Item[]"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    HookManager.getInstance().getClassPool().get(short[].class.getName()),
+                    CtPrimitiveType.shortType, CtPrimitiveType.intType,
+                    CtPrimitiveType.longType, CtPrimitiveType.intType, CtPrimitiveType.intType, CtPrimitiveType.intType,
+                    CtPrimitiveType.intType,
+                    HookManager.getInstance().getClassPool().get(byte[].class.getName()),
+                    HookManager.getInstance().getClassPool().get("java.lang.String"),
+                    CtPrimitiveType.floatType, CtPrimitiveType.intType, CtPrimitiveType.byteType, CtPrimitiveType.intType,
+                    CtPrimitiveType.booleanType, CtPrimitiveType.intType, CtPrimitiveType.intType
+            };
+            String descriptor = Descriptor.ofMethod(returnType, paramTypes);
+            CtMethod createItemTemplate = HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.ItemTemplateFactory")
+                    .getMethod("createItemTemplate", descriptor);
+            createItemTemplate.instrument(new ExprEditor() {
+                @Override
+                public void edit(FieldAccess fieldAccess) throws CannotCompileException {
+                    if (Objects.equals("baseCombatRating", fieldAccess.getFieldName()))
+                        fieldAccess.replace("$_ = 1.0f;");
+                }
+            });
+        }catch (NotFoundException | CannotCompileException e){
+            logger.warning(e.getMessage());
+        }
+
         ModActions.init();
     }
 
@@ -160,7 +207,7 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
 
         pickMattockTemplateID = IdFactory.getIdFor("jdbPickMattock", IdType.ITEMTEMPLATE);
         ItemTemplateBuilder pickMattockTempBuilder = new ItemTemplateBuilder("jdbPickMattock");
-        pickMattockTempBuilder.name("pick mattock","pick mattocks", "A multipurpose terraforming tool designed for dirt and rock.");
+        pickMattockTempBuilder.name("pick mattock","pick mattocks", "A multipurpose terraforming tool.");
         pickMattockTempBuilder.size(3);
         //pickMattockTempBuilder.descriptions();
         pickMattockTempBuilder.itemTypes(new short[]{ItemTypes.ITEM_TYPE_TOOL, ItemTypes.ITEM_TYPE_NAMED,

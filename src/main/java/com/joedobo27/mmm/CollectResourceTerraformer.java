@@ -25,8 +25,7 @@ class CollectResourceTerraformer extends ActionMaster {
     CollectResourceTerraformer(Action action, Creature performer, @Nullable Item activeTool, int usedSkill, int minSkill,
                                int maxSkill, int longestTime, int shortestTime, int minimumStamina,
                                ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetedTile) {
-        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina,
-                failureTestFunctions);
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
         this.targetedTile = targetedTile;
         actionDataWeakHashMap.put(action, this);
     }
