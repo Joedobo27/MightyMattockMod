@@ -17,7 +17,9 @@ import static com.joedobo27.libs.TileUtilities.getPerformerNearestTile;
 
 public class TerraformBehaviours implements ModAction, BehaviourProvider {
 
-    TerraformBehaviours(){}
+    private static ActionEntry collectResourceAction;
+    private static ActionEntry raiseRockAction;
+    private static ActionEntry raiseDirtAction;
 
     /**
      * Chop; Cut down trees and bushes.
@@ -31,11 +33,11 @@ public class TerraformBehaviours implements ModAction, BehaviourProvider {
         TilePos actionTile = TilePos.fromXY(tileX, tileY);
         if (TileUtilities.isPackable(actionTile))
             toReturn.add(Actions.actionEntrys[Actions.ROAD_PACK]);
-        Tiles.Tile tileType = Tiles.getTile(TileUtilities.getSurfaceTypeId(actionTile));
-        if (tileType != null && (tileType.isTree() || tileType.isBush()))
-            toReturn.add(Actions.actionEntrys[Actions.CHOP]);
+        //Tiles.Tile tileType = Tiles.getTile(TileUtilities.getSurfaceTypeId(actionTile));
+        //if (tileType != null && (tileType.isTree() || tileType.isBush()))
+         //   toReturn.add(Actions.actionEntrys[Actions.CHOP]);
         if (TileUtilities.isResourceTile(actionTile))
-            toReturn.add(Actions.actionEntrys[MightyMattockMod.getCollectResourceEntryId()]);
+            toReturn.add(collectResourceAction);
         return toReturn;
     }
 
@@ -63,17 +65,17 @@ public class TerraformBehaviours implements ModAction, BehaviourProvider {
             else
                 toReturn.add(new ActionEntry((short) (-2), "Terraform", ""));
             toReturn.add(Actions.actionEntrys[Actions.MINE]);
-            toReturn.add(Actions.actionEntrys[MightyMattockMod.getRaiseRockEntryId()]);
+            toReturn.add(raiseRockAction);
             //toReturn.add(Actions.actionEntrys[Actions.LEVEL]);
             if (onSurface)
-                toReturn.add(Actions.actionEntrys[MightyMattockMod.getRaiseDirtEntryId()]);
+                toReturn.add(raiseDirtAction);
             return toReturn;
         }
         if (TileUtilities.getDirtDepth(opposingCorner) > 0) {
             ArrayList<ActionEntry> toReturn = new ArrayList<>();
             toReturn.add(new ActionEntry((short) (-2), "Terraform", ""));
             toReturn.add(Actions.actionEntrys[Actions.DIG]);
-            toReturn.add(Actions.actionEntrys[MightyMattockMod.getRaiseDirtEntryId()]);
+            toReturn.add(raiseDirtAction);
             //toReturn.add(Actions.actionEntrys[Actions.LEVEL]);
             return toReturn;
         }
@@ -109,5 +111,17 @@ public class TerraformBehaviours implements ModAction, BehaviourProvider {
     private static boolean performerWithinOneTile(Creature performer, TilePos opposingCorner) {
         TilePos performerTile = TileUtilities.getPerformerNearestTile(performer);
         return Math.abs(performerTile.x - opposingCorner.x) <= 1 && Math.abs(performerTile.y - opposingCorner.y) <= 1;
+    }
+
+    public static void setCollectResourceAction(ActionEntry collectResourceAction) {
+        TerraformBehaviours.collectResourceAction = collectResourceAction;
+    }
+
+    public static void setRaiseRockAction(ActionEntry raiseRockAction) {
+        TerraformBehaviours.raiseRockAction = raiseRockAction;
+    }
+
+    public static void setRaiseDirtAction(ActionEntry raiseDirtAction) {
+        TerraformBehaviours.raiseDirtAction = raiseDirtAction;
     }
 }

@@ -1,7 +1,5 @@
 package com.joedobo27.mmm;
 
-import com.wurmonline.server.behaviours.ActionEntry;
-import com.wurmonline.server.behaviours.Actions;
 import com.wurmonline.server.creatures.Communicator;
 import com.wurmonline.server.items.CreationCategories;
 import com.wurmonline.server.items.CreationEntryCreator;
@@ -9,12 +7,6 @@ import com.wurmonline.server.items.ItemList;
 import com.wurmonline.server.items.ItemTypes;
 import com.wurmonline.server.skills.SkillList;
 import com.wurmonline.shared.constants.ItemMaterials;
-import javassist.*;
-import javassist.bytecode.Descriptor;
-import javassist.expr.ExprEditor;
-import javassist.expr.FieldAccess;
-import javassist.tools.reflect.CannotReflectException;
-import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.*;
 import org.gotti.wurmunlimited.modsupport.IdFactory;
 import org.gotti.wurmunlimited.modsupport.IdType;
@@ -22,13 +14,11 @@ import org.gotti.wurmunlimited.modsupport.ItemTemplateBuilder;
 import org.gotti.wurmunlimited.modsupport.actions.ModActions;
 
 import java.io.IOException;
-import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.joedobo27.libs.action.ActionMaster.setActionEntryMaxRangeReflect;
-import static com.joedobo27.libs.action.ActionTypes.*;
 
 
 public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurable, ServerStartedListener,
@@ -36,9 +26,6 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
 
     private static int pickMattockHeadTemplateID;
     private static int pickMattockTemplateID;
-    private static int raiseDirtEntryId;
-    private static int raiseRockEntryId;
-    private static int collectResourceEntryId;
 
     @SuppressWarnings("WeakerAccess")
     static final Logger logger = Logger.getLogger(MightyMattockMod.class.getName());
@@ -66,46 +53,6 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
 
     @Override
     public void preInit() {
-        try {
-            CtClass returnType = HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.ItemTemplate");
-            // int templateId, int size, String name, String plural, String itemDescriptionSuperb,
-            // String itemDescriptionNormal, String itemDescriptionBad, String itemDescriptionRotten,
-            // String itemDescriptionLong, short[] itemTypes, short imageNumber, short behaviourType, int combatDamage,
-            // long decayTime, int centimetersX, int centimetersY, int centimetersZ, int primarySkill, byte[] bodySpaces,
-            // String modelName, float difficulty, int weight, byte material, int value, boolean isTraded, int armourType,
-            // int dyeAmountOverrideGrams
-            CtClass[] paramTypes = {
-                    CtPrimitiveType.intType, CtPrimitiveType.intType,
-                    HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.Item[]"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    HookManager.getInstance().getClassPool().get(short[].class.getName()),
-                    CtPrimitiveType.shortType, CtPrimitiveType.intType,
-                    CtPrimitiveType.longType, CtPrimitiveType.intType, CtPrimitiveType.intType, CtPrimitiveType.intType,
-                    CtPrimitiveType.intType,
-                    HookManager.getInstance().getClassPool().get(byte[].class.getName()),
-                    HookManager.getInstance().getClassPool().get("java.lang.String"),
-                    CtPrimitiveType.floatType, CtPrimitiveType.intType, CtPrimitiveType.byteType, CtPrimitiveType.intType,
-                    CtPrimitiveType.booleanType, CtPrimitiveType.intType, CtPrimitiveType.intType
-            };
-            String descriptor = Descriptor.ofMethod(returnType, paramTypes);
-            CtMethod createItemTemplate = HookManager.getInstance().getClassPool().get("com.wurmonline.server.items.ItemTemplateFactory")
-                    .getMethod("createItemTemplate", descriptor);
-            createItemTemplate.instrument(new ExprEditor() {
-                @Override
-                public void edit(FieldAccess fieldAccess) throws CannotCompileException {
-                    if (Objects.equals("baseCombatRating", fieldAccess.getFieldName()))
-                        fieldAccess.replace("$_ = 1.0f;");
-                }
-            });
-        }catch (NotFoundException | CannotCompileException e){
-            logger.warning(e.getMessage());
-        }
-
         ModActions.init();
     }
 
@@ -118,45 +65,40 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
     public void onServerStarted() {
         ModActions.registerAction(new TerraformBehaviours());
 
-        ChopAction cutDownAction = new ChopAction(Actions.CHOP, Actions.actionEntrys[Actions.CUT]);
-        ModActions.registerAction(cutDownAction);
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.CHOP], 8, logger);
+        ChopActionPerformer chopActionPerformer = ChopActionPerformer.getChopActionPerformer();
+        ModActions.registerAction(chopActionPerformer);
+        setActionEntryMaxRangeReflect(chopActionPerformer.getActionEntry(), 8, logger);
 
-        collectResourceEntryId = ModActions.getNextActionId();
-        ActionEntry actionEntryCollectResource = ActionEntry.createEntry((short)collectResourceEntryId, "Collect resource",
-                "collecting resource", new int[]{ACTION_FATIGUE.getId(), ACTION_POLICED.getId(), ACTION_SHOW_ON_SELECT_BAR.getId()});
-        ModActions.registerAction(actionEntryCollectResource);
-        CollectResourceAction collectResourceAction = new CollectResourceAction(collectResourceEntryId, actionEntryCollectResource);
-        ModActions.registerAction(collectResourceAction);
-        setActionEntryMaxRangeReflect(actionEntryCollectResource, 8, logger);
+        CollectResourceActionPerformer collectResourceActionPerformer = CollectResourceActionPerformer.getCollectResourceActionPerformer();
+        ModActions.registerAction(collectResourceActionPerformer);
+        ModActions.registerAction(collectResourceActionPerformer.getActionEntry());
+        setActionEntryMaxRangeReflect(collectResourceActionPerformer.getActionEntry(), 8, logger);
+        TerraformBehaviours.setCollectResourceAction(collectResourceActionPerformer.getActionEntry());
 
-        DigAction digAction = new DigAction(Actions.DIG, Actions.actionEntrys[Actions.DIG]);
-        ModActions.registerAction(digAction);
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.DIG], 8, logger);
+        DigActionPerformer digActionPerformer = DigActionPerformer.getDigActionPerformer();
+        ModActions.registerAction(digActionPerformer);
+        setActionEntryMaxRangeReflect(digActionPerformer.getActionEntry(), 8, logger);
 
-        MineAction mineAction = new MineAction(Actions.MINE, Actions.actionEntrys[Actions.MINE]);
-        ModActions.registerAction(mineAction);
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.MINE], 8, logger);
+        MineActionPerformer mineActionPerformer = MineActionPerformer.getMineActionPerformer();
+        ModActions.registerAction(mineActionPerformer);
+        setActionEntryMaxRangeReflect(mineActionPerformer.getActionEntry(), 8, logger);
 
-        PackAction packAction = new PackAction(Actions.ROAD_PACK, Actions.actionEntrys[Actions.ROAD_PACK]);
-        ModActions.registerAction(packAction);
-        setActionEntryMaxRangeReflect(Actions.actionEntrys[Actions.ROAD_PACK], 8, logger);
+        PackActionPerformer packActionPerformer = PackActionPerformer.getPackActionPerformer();
+        ModActions.registerAction(packActionPerformer);
+        setActionEntryMaxRangeReflect(packActionPerformer.getActionEntry(), 8, logger);
 
-        raiseDirtEntryId = ModActions.getNextActionId();
-        ActionEntry actionEntryRaiseDirt = ActionEntry.createEntry((short)raiseDirtEntryId, "Raise dirt",
-                "raising dirt", new int[]{ACTION_FATIGUE.getId(), ACTION_POLICED.getId(), ACTION_SHOW_ON_SELECT_BAR.getId()});
-        ModActions.registerAction(actionEntryRaiseDirt);
-        RaiseDirtAction raiseDirtAction = new RaiseDirtAction(raiseDirtEntryId, actionEntryRaiseDirt);
-        ModActions.registerAction(raiseDirtAction);
-        setActionEntryMaxRangeReflect(actionEntryRaiseDirt, 8, logger);
+        RaiseDirtActionPerformer raiseDirtActionPerformer = RaiseDirtActionPerformer.getRaiseDirtActionPerformer();
+        ModActions.registerAction(raiseDirtActionPerformer);
+        ModActions.registerAction(raiseDirtActionPerformer.getActionEntry());
+        setActionEntryMaxRangeReflect(raiseDirtActionPerformer.getActionEntry(), 8, logger);
+        TerraformBehaviours.setRaiseDirtAction(raiseDirtActionPerformer.getActionEntry());
 
-        raiseRockEntryId = ModActions.getNextActionId();
-        ActionEntry actionEntryRaiseRock = ActionEntry.createEntry((short)raiseRockEntryId, "Raise rock",
-                "raising rock", new int[]{ACTION_FATIGUE.getId(), ACTION_POLICED.getId(), ACTION_SHOW_ON_SELECT_BAR.getId()});
-        ModActions.registerAction(actionEntryRaiseRock);
-        RaiseRockAction raiseRockAction = new RaiseRockAction(raiseRockEntryId, actionEntryRaiseRock);
-        ModActions.registerAction(raiseRockAction);
-        setActionEntryMaxRangeReflect(actionEntryRaiseRock, 8, logger);
+        RaiseRockActionPerformer raiseRockActionPerformer = RaiseRockActionPerformer.getRaiseRockActionPerformer();
+        ModActions.registerAction(raiseRockActionPerformer);
+        ModActions.registerAction(raiseRockActionPerformer.getActionEntry());
+        setActionEntryMaxRangeReflect(raiseRockActionPerformer.getActionEntry(), 8, logger);
+        TerraformBehaviours.setRaiseRockAction(raiseRockActionPerformer.getActionEntry());
+
 
         CreationEntryCreator.createSimpleEntry(SkillList.SMITHING_BLACKSMITHING,
                 ItemList.anvilLarge, ItemList.ironBar, pickMattockHeadTemplateID, false, true, 0.0f, false, false,
@@ -233,19 +175,7 @@ public class MightyMattockMod implements  WurmServerMod, PreInitable, Configurab
         }
     }
 
-    static int getRaiseDirtEntryId() {
-        return raiseDirtEntryId;
-    }
-
-    static int getRaiseRockEntryId() {
-        return raiseRockEntryId;
-    }
-
     static int getPickMattockTemplateID() {
         return pickMattockTemplateID;
-    }
-
-    static int getCollectResourceEntryId() {
-        return collectResourceEntryId;
     }
 }

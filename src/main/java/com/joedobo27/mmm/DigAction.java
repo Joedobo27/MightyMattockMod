@@ -1,91 +1,182 @@
 package com.joedobo27.mmm;
 
+import com.joedobo27.libs.TileUtilities;
 import com.joedobo27.libs.action.ActionMaster;
+import com.wurmonline.math.TilePos;
 import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.FailedException;
+import com.wurmonline.server.Players;
+import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
-import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.*;
-import com.wurmonline.server.skills.SkillList;
-import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
-import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import com.wurmonline.server.zones.Zone;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
-import static com.joedobo27.libs.action.ActionFailureFunction.*;
-import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
+class DigAction extends ActionMaster {
 
-public class DigAction implements ModAction, ActionPerformer {
+    private final TilePos targetedTile;
+    private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
+    static WeakHashMap<Action, DigAction> actionDataWeakHashMap = new WeakHashMap<>();
 
-    private final ActionEntry actionEntry;
-    private final int actionId;
+    DigAction(Action action, Creature performer, @Nullable Item activeTool, int usedSkill, int minSkill,
+              int maxSkill, int longestTime, int shortestTime, int minimumStamina,
+              ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetedTile) {
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+        this.failureTestFunctions = failureTestFunctions;
+        this.targetedTile = targetedTile;
+        actionDataWeakHashMap.put(action, this);
+    }
 
-    DigAction(int actionId, ActionEntry actionEntry) {
-        this.actionEntry = actionEntry;
-        this.actionId = actionId;
+    static boolean hashMapHasInstance(Action action) {
+        return actionDataWeakHashMap.containsKey(action);
+    }
+
+    boolean hasAFailureCondition() {
+        return failureTestFunctions.stream()
+                .anyMatch(function -> function.apply(this));
+    }
+
+    void modifyHeight(int modifier) {
+        TileUtilities.setSurfaceHeight(this.targetedTile, TileUtilities.getSurfaceHeight(this.targetedTile) + modifier);
+        Players.getInstance().sendChangedTile(this.targetedTile.x, this.targetedTile.y, this.performer.isOnSurface(),
+                true);
+    }
+
+    /**
+     * For the corner being dug there are 4 tiles affect. Check to see if the tile should be converted to dirt.
+     * In the case where it's converted do the transformation and update the appropriate tile state values.
+     */
+    void shouldMutableBeDirt() {
+        TilePos[] checkTiles = {this.targetedTile, this.targetedTile.West(), this.targetedTile.NorthWest(),
+                this.targetedTile.North()};
+        TilePos[] makeDirtPos = Arrays.stream(checkTiles)
+                .filter(TileUtilities::isTileOverriddenByDirt)
+                .toArray(TilePos[]::new);
+        if (makeDirtPos == null || makeDirtPos.length == 0) {
+            return;
+        }
+        Arrays.stream(makeDirtPos)
+                .forEach(tilePos -> {
+                    Server.modifyFlagsByTileType(tilePos.x, tilePos.y, Tiles.Tile.TILE_DIRT.id);
+                    TileUtilities.setSurfaceTypeId(tilePos, Tiles.Tile.TILE_DIRT.id);
+                    this.performer.getMovementScheme().touchFreeMoveCounter();
+                    Players.getInstance().sendChangedTile(tilePos.x, tilePos.y, performer.isOnSurface(), true);
+                    Zone zone = TileUtilities.getZoneSafe(tilePos, this.performer.isOnSurface());
+                    if (zone != null)
+                        zone.changeTile(tilePos.x, tilePos.y);
+                });
+    }
+
+    /**
+     * For the corner being dug there are 4 tiles affect. And for these 4 affected tiles check each's 4 corners to see if
+     * the tile should be converted form dirt to rock. In the case where it's converted do the transformation and update
+     * the appropriate tile state values.
+     */
+    void shouldDirtBeRock() {
+        TilePos[] tilePos = {this.targetedTile, this.targetedTile.West(), this.targetedTile.NorthWest(),
+                this.targetedTile.North()};
+        TilePos[] makeRockPos = Arrays.stream(tilePos)
+                .filter(tilePos1 -> !Tiles.isTree(TileUtilities.getSurfaceTypeId(tilePos1)) && !TileUtilities.isImmutableTile(tilePos1))
+                .filter(tilePos1 -> TileUtilities.getSurfaceHeight(tilePos1) <= TileUtilities.getRockHeight(tilePos1))
+                .filter(tilePos1 -> TileUtilities.getSurfaceHeight(tilePos1.East()) <= TileUtilities.getRockHeight(tilePos1.East()))
+                .filter(tilePos1 -> TileUtilities.getSurfaceHeight(tilePos1.SouthEast()) <= TileUtilities.getRockHeight(tilePos1.SouthEast()))
+                .filter(tilePos1 -> TileUtilities.getSurfaceHeight(tilePos1.South()) <= TileUtilities.getRockHeight(tilePos1.South()))
+                .toArray(TilePos[]::new);
+        if (makeRockPos == null || makeRockPos.length == 0) {
+            return;
+        }
+        Arrays.stream(makeRockPos)
+                .forEach(tilePos1 -> {
+                    Server.modifyFlagsByTileType(tilePos1.x, tilePos1.y, Tiles.Tile.TILE_ROCK.id);
+                    TileUtilities.setSurfaceTypeId(tilePos1, Tiles.Tile.TILE_ROCK.id);
+                    this.performer.getMovementScheme().touchFreeMoveCounter();
+                    Players.getInstance().sendChangedTile(tilePos1.x, tilePos1.y, this.performer.isOnSurface(), true);
+                    Zone zone = TileUtilities.getZoneSafe(tilePos1, this.performer.isOnSurface());
+                    if (zone != null)
+                        zone.changeTile(tilePos1.x, tilePos1.y);
+                });
+    }
+
+    double doSkillCheckAndGetPower(float counter) {
+        if (this.usedSkill == null)
+            return -1.0d;
+        double difficulty = 1 + (TileUtilities.getSteepestSlope(this.targetedTile) / 5);
+        switch (TileUtilities.getSurfaceTypeId(this.targetedTile)) {
+            case Tiles.TILE_TYPE_CLAY:
+                difficulty += 20;
+                break;
+            case Tiles.TILE_TYPE_SAND:
+                difficulty += 10;
+                break;
+            case Tiles.TILE_TYPE_TAR:
+                difficulty += 35;
+                break;
+            case Tiles.TILE_TYPE_MOSS:
+                difficulty += 10;
+                break;
+            case Tiles.TILE_TYPE_MARSH:
+                difficulty += 30;
+                break;
+            case Tiles.TILE_TYPE_STEPPE:
+                difficulty += 40;
+                break;
+            case Tiles.TILE_TYPE_TUNDRA:
+                difficulty += 20;
+        }
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, counter));
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    Item makeDugItemOnGround(double power) {
+        int createdItemTemplate;
+        switch (TileUtilities.getSurfaceTypeId(this.targetedTile)) {
+            case Tiles.TILE_TYPE_SAND:
+                createdItemTemplate = ItemList.sand;
+                break;
+            default:
+                createdItemTemplate = ItemList.dirtPile;
+        }
+        float runeModifier = 1.0f;
+        if (this.activeTool != null && this.activeTool.getSpellEffects() != null && this.activeTool.getSpellEffects()
+                .getRuneEffect(RuneUtilities.ModifierEffect.ENCH_RESGATHERED) != -10L) {
+            runeModifier += this.activeTool.getSpellEffects().getRuneEffect(RuneUtilities.ModifierEffect.ENCH_RESGATHERED);
+        }
+        Item created = null;
+        double rarityModifier = this.activeTool == null ? 0 : this.activeTool.getRarity();
+        try {
+            created = ItemFactory.createItem(createdItemTemplate, Math.min((float) (power + rarityModifier) * runeModifier, 100.0f),
+                    (this.targetedTile.x * 4) + 2, (this.targetedTile.y * 4) + 2, Server.rand.nextFloat() * 360.0f,
+                    performer.isOnSurface(), action.getRarity(), -10L, null);
+        }catch (NoSuchTemplateException | FailedException ignored){}
+        if (created == null) {
+            this.performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
+            return null;
+        }
+        created.setLastOwnerId(this.performer.getWurmId());
+        created.setRarity(this.action.getRarity());
+        return created;
     }
 
     @Override
-    public short getActionId() {return (short)this.actionId;}
+    public Item getActiveTool() {
+        return activeTool;
+    }
 
     @Override
-    public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface, int heightOffset,
-                          Tiles.TileBorderDirection borderDirection, long borderId, short actionId, float counter) {
-        if (actionId != this.actionId || !TerraformBehaviours.isMattock(source))
-            return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
+    public Item getTargetItem() {
+        return null;
+    }
 
-        DigTerraformer terraformerDig;
-        if (!DigTerraformer.hashMapHasInstance(action)) {
-            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_DIGGING_ROCK));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_CORNER_OCCUPIED_BY_FENCE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_HOUSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_BRIDGE_SUPPORT));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_BRIDGE_EXIT));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_CAVE_ENTRANCE));
-
-            ConfigureActionOptions options = ConfigureOptions.getInstance().getDigActionOptions();
-            terraformerDig = new DigTerraformer(action, performer, source, SkillList.DIGGING, options.getMinSkill(),
-                                                options.getMaxSkill(),options.getLongestTime(),
-                                                options.getShortestTime(), options.getMinimumStamina(),
-                                                failureTestFunctions,
-                                                TerraformBehaviours.getOpposingCorner(
-                                                        performer, tileX, tileY, borderDirection));
-        }
-        else
-            terraformerDig = DigTerraformer.actionDataWeakHashMap.get(action);
-
-        if(terraformerDig.isActionStartTime(counter) && terraformerDig.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (terraformerDig.isActionStartTime(counter)) {
-            terraformerDig.doActionStartMessages();
-            terraformerDig.setInitialTime(this.actionEntry);
-            source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-            performer.getStatus().modifyStamina(-1000.0f);
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
-
-        if (!terraformerDig.isActionTimedOut(action, counter))
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (terraformerDig.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        terraformerDig.modifyHeight(-1);
-        terraformerDig.shouldDirtBeRock();
-        terraformerDig.shouldMutableBeDirt();
-        double power = terraformerDig.doSkillCheckAndGetPower(counter);
-        source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-        performer.getStatus().modifyStamina(-5000.0f);
-        terraformerDig.makeDugItemOnGround(power);
-        terraformerDig.doActionEndMessages();
-        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-}
+    @Override
+    public TilePos getTargetTile() {
+        return this.targetedTile;
+    }
 }

@@ -1,83 +1,120 @@
 package com.joedobo27.mmm;
 
 import com.joedobo27.libs.TileUtilities;
+import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
+import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.FailedException;
+import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
-import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
-import com.wurmonline.server.items.Item;
-import com.wurmonline.server.skills.SkillList;
-import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
-import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import com.wurmonline.server.items.*;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
-import static com.joedobo27.mmm.ActionFailureFunction.*;
-import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
+class CollectResourceAction extends ActionMaster {
 
-public class CollectResourceAction implements ModAction, ActionPerformer {
+    private final TilePos targetedTile;
+    private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
 
-    private final ActionEntry actionEntry;
-    private final int actionId;
+    static WeakHashMap<Action, CollectResourceAction> actionDataWeakHashMap = new WeakHashMap<>();
 
-    CollectResourceAction(int actionId, ActionEntry actionEntry) {
-        this.actionId = actionId;
-        this.actionEntry = actionEntry;
+    CollectResourceAction(Action action, Creature performer, @Nullable Item activeTool, int usedSkill, int minSkill,
+                          int maxSkill, int longestTime, int shortestTime, int minimumStamina,
+                          ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetedTile) {
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+        this.targetedTile = targetedTile;
+        this.failureTestFunctions = failureTestFunctions;
+        actionDataWeakHashMap.put(action, this);
+    }
 
+    static boolean hashMapHasInstance(Action action) {
+        return actionDataWeakHashMap.containsKey(action);
+    }
+
+    boolean hasAFailureCondition() {
+        return failureTestFunctions.stream()
+                .anyMatch(function -> function.apply(this));
+    }
+
+    double doSkillCheckAndGetPower(float counter) {
+        if (this.usedSkill == null)
+            return -1.0d;
+        double difficulty = 1 + (TileUtilities.getSteepestSlope(this.targetedTile) / 5);
+        switch (TileUtilities.getSurfaceTypeId(this.targetedTile)) {
+            case Tiles.TILE_TYPE_CLAY:
+                difficulty += 20;
+                break;
+            case Tiles.TILE_TYPE_PEAT:
+                difficulty += 20;
+                break;
+            case Tiles.TILE_TYPE_TAR:
+                difficulty += 35;
+                break;
+            case Tiles.TILE_TYPE_MOSS:
+                difficulty += 10;
+                break;
+        }
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, counter));
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    Item makeDugItemOnGround(double power) {
+        Integer createdItemTemplate = null;
+        switch (TileUtilities.getSurfaceTypeId(this.targetedTile)) {
+            case Tiles.TILE_TYPE_CLAY:
+                createdItemTemplate = ItemList.clay;
+                break;
+            case Tiles.TILE_TYPE_PEAT:
+                createdItemTemplate = ItemList.peat;
+                break;
+            case Tiles.TILE_TYPE_TAR:
+                createdItemTemplate = ItemList.tar;
+                break;
+            case Tiles.TILE_TYPE_MOSS:
+                createdItemTemplate = ItemList.moss;
+                break;
+        }
+        if (createdItemTemplate == null)
+            return null;
+        float runeModifier = 1.0f;
+        if (this.activeTool != null && this.activeTool.getSpellEffects() != null && this.activeTool.getSpellEffects()
+                .getRuneEffect(RuneUtilities.ModifierEffect.ENCH_RESGATHERED) != -10L) {
+            runeModifier += this.activeTool.getSpellEffects().getRuneEffect(RuneUtilities.ModifierEffect.ENCH_RESGATHERED);
+        }
+        Item created = null;
+        double rarityModifier = this.activeTool == null ? 0 : this.activeTool.getRarity();
+        try {
+            created = ItemFactory.createItem(createdItemTemplate, Math.min((float) (power + rarityModifier) * runeModifier, 100.0f),
+                    (this.targetedTile.x * 4) + 2, (this.targetedTile.y * 4) + 2, Server.rand.nextFloat() * 360.0f,
+                    performer.isOnSurface(), action.getRarity(), -10L, null);
+        }catch (NoSuchTemplateException | FailedException ignored){}
+        if (created == null) {
+            this.performer.getCommunicator().sendNormalServerMessage("Sorry, something went wrong.");
+            return null;
+        }
+        created.setLastOwnerId(this.performer.getWurmId());
+        created.setRarity(this.action.getRarity());
+        return created;
     }
 
     @Override
-    public short getActionId() {return (short)this.actionId;}
-
-    @Override
-    public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface,
-                          int heightOffset, int encodedTile, short actionId, float counter) {
-        if (!TerraformBehaviours.isMattock(source) || !TileUtilities.isResourceTile(TilePos.fromXY(tileX, tileY))) {
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
-        CollectResourceTerraformer collectResourceTerraformer;
-        if (!CollectResourceTerraformer.hashMapHasInstance(action)){
-            ArrayList<Function<MightyMattockAction, Boolean>> failureTestFunctions = new ArrayList<>();
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_HOUSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_IS_OCCUPIED_BY_BRIDGE_SUPPORT));
-
-            ConfigureActionOptions options = ConfigureOptions.getInstance().getCollectResourceActionOptions();
-            collectResourceTerraformer = new CollectResourceTerraformer(action, performer, source, SkillList.DIGGING,
-                    options.getMinSkill(), options.getMaxSkill(), options.getLongestTime(), options.getShortestTime()
-                    , options.getMinimumStamina(), failureTestFunctions, TilePos.fromXY(tileX, tileY));
-        }
-        else
-            collectResourceTerraformer = CollectResourceTerraformer.actionDataWeakHashMap.get(action);
-
-        if(collectResourceTerraformer.isActionStartTime(counter) && collectResourceTerraformer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (collectResourceTerraformer.isActionStartTime(counter)) {
-            collectResourceTerraformer.doActionStartMessages();
-            collectResourceTerraformer.setInitialTime(this.actionEntry);
-            source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-            performer.getStatus().modifyStamina(-1000.0f);
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
-
-        if (!collectResourceTerraformer.isActionTimedOut(action, counter))
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (collectResourceTerraformer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        double power = collectResourceTerraformer.doSkillCheckAndGetPower(counter);
-        source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-        performer.getStatus().modifyStamina(-5000.0f);
-        collectResourceTerraformer.makeDugItemOnGround(power);
-        collectResourceTerraformer.doActionEndMessages();
-        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+    public Item getActiveTool() {
+        return activeTool;
     }
 
+    @Override
+    public Item getTargetItem() {
+        return null;
+    }
+
+    @Override
+    public TilePos getTargetTile() {
+        return this.targetedTile;
+    }
 }

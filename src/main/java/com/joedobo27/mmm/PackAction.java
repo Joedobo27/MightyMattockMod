@@ -3,83 +3,73 @@ package com.joedobo27.mmm;
 import com.joedobo27.libs.TileUtilities;
 import com.joedobo27.libs.action.ActionMaster;
 import com.wurmonline.math.TilePos;
+import com.wurmonline.mesh.Tiles;
+import com.wurmonline.server.Players;
+import com.wurmonline.server.Server;
 import com.wurmonline.server.behaviours.Action;
-import com.wurmonline.server.behaviours.ActionEntry;
 import com.wurmonline.server.creatures.Creature;
 import com.wurmonline.server.items.Item;
-import com.wurmonline.server.skills.SkillList;
-import org.gotti.wurmunlimited.modsupport.actions.ActionPerformer;
-import org.gotti.wurmunlimited.modsupport.actions.ModAction;
+import com.wurmonline.server.zones.Zone;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
-import static com.joedobo27.libs.action.ActionFailureFunction.*;
-import static org.gotti.wurmunlimited.modsupport.actions.ActionPropagation.*;
+class PackAction extends ActionMaster {
 
-class PackAction implements ModAction, ActionPerformer {
+    private final TilePos targetedTile;
+    private final ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions;
+    static WeakHashMap<Action, PackAction> actionDataWeakHashMap = new WeakHashMap<>();
 
-    private final ActionEntry actionEntry;
-    private final int actionId;
+    PackAction(Action action, Creature performer, @Nullable Item activeTool, int usedSkill, int minSkill,
+               int maxSkill, int longestTime, int shortestTime, int minimumStamina,
+               ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions, TilePos targetedTile) {
+        super(action, performer, activeTool, usedSkill, minSkill, maxSkill, longestTime, shortestTime, minimumStamina);
+        this.failureTestFunctions = failureTestFunctions;
+        this.targetedTile = targetedTile;
+        actionDataWeakHashMap.put(action, this);
+    }
 
-    PackAction(int actionId, ActionEntry actionEntry) {
-        this.actionId = actionId;
-        this.actionEntry = actionEntry;
+    static boolean hashMapHasInstance(Action action) {
+        return actionDataWeakHashMap.containsKey(action);
+    }
+
+    boolean hasAFailureCondition() {
+        return failureTestFunctions.stream()
+                .anyMatch(function -> function.apply(this));
+    }
+
+    void packTile() {
+        Server.modifyFlagsByTileType(this.targetedTile.x, this.targetedTile.y, Tiles.Tile.TILE_DIRT_PACKED.id);
+        TileUtilities.setSurfaceTypeId(this.targetedTile, Tiles.Tile.TILE_DIRT_PACKED.id);
+        Zone zone = TileUtilities.getZoneSafe(this.targetedTile, this.performer.isOnSurface());
+        if (zone != null)
+            zone.changeTile(this.targetedTile.x, this.targetedTile.y);
+        Players.getInstance().sendChangedTile(this.targetedTile.x, this.targetedTile.y, performer.isOnSurface(), true);
+    }
+
+    double doSkillCheckAndGetPower(float counter) {
+        if (this.usedSkill == null)
+            return -1.0d;
+        double difficulty = 1 + (TileUtilities.getSteepestSlope(this.targetedTile) / 5);
+        return Math.max(1.0d,
+                this.performer.getSkills().getSkillOrLearn(this.usedSkill).skillCheck(difficulty, this.activeTool,
+                        0, false, counter));
     }
 
     @Override
-    public short getActionId() {
-        return (short)this.actionId;
+    public Item getActiveTool() {
+        return activeTool;
     }
 
     @Override
-    public boolean action(Action action, Creature performer, Item source, int tileX, int tileY, boolean onSurface,
-                          int heightOffset, int encodedTile, short actionId, float counter) {
-        if (!TerraformBehaviours.isMattock(source) || !TileUtilities.isPackable(TilePos.fromXY(tileX, tileY))) {
-            return propagate(action, SERVER_PROPAGATION, ACTION_PERFORMER_PROPAGATION);
-        }
+    public Item getTargetItem() {
+        return null;
+    }
 
-        PackTerraformer packTerraformer;
-        if (!PackTerraformer.hashMapHasInstance(action)) {
-            ArrayList<Function<ActionMaster, Boolean>> failureTestFunctions = new ArrayList<>();
-
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_INSUFFICIENT_STAMINA));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_SERVER_BOARDER_TOO_CLOSE));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_GOD_PROTECTED));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVE_VILLAGE_ENEMY_ACTION));
-            failureTestFunctions.add(getFunction(FAILURE_FUNCTION_PVP_VILLAGE_ENEMY_ACTION));
-
-            ConfigureActionOptions options = ConfigureOptions.getInstance().getPackActionOptions();
-            packTerraformer = new PackTerraformer(action, performer, source, SkillList.DIGGING, options.getMinSkill(),
-                                                  options.getMaxSkill(), options.getLongestTime(),
-                                                  options.getShortestTime(), options.getMinimumStamina(),
-                                                  failureTestFunctions, TilePos.fromXY(tileX, tileY));
-        }
-        else
-            packTerraformer = PackTerraformer.actionDataWeakHashMap.get(action);
-
-        if(packTerraformer.isActionStartTime(counter) && packTerraformer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (packTerraformer.isActionStartTime(counter)) {
-            packTerraformer.doActionStartMessages();
-            packTerraformer.setInitialTime(this.actionEntry);
-            source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-            performer.getStatus().modifyStamina(-1000.0f);
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-        }
-
-        if (!packTerraformer.isActionTimedOut(action, counter))
-            return propagate(action, CONTINUE_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        if (packTerraformer.hasAFailureCondition())
-            return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
-
-        packTerraformer.packTile();
-        packTerraformer.doSkillCheckAndGetPower(counter);
-        source.setDamage(source.getDamage() + 0.0015f * source.getDamageModifier());
-        performer.getStatus().modifyStamina(-5000.0f);
-        packTerraformer.doActionEndMessages();
-        return propagate(action, FINISH_ACTION, NO_SERVER_PROPAGATION, NO_ACTION_PERFORMER_PROPAGATION);
+    @Override
+    public TilePos getTargetTile() {
+        return this.targetedTile;
     }
 }

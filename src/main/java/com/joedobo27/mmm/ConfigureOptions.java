@@ -8,10 +8,6 @@ import java.util.Properties;
 
 class ConfigureOptions {
 
-    private final float pveDepthMultiplier;
-    private final float pvpDepthMultiplier;
-    private final float pveSlopeMultiplier;
-    private final float pvpSlopeMultiplier;
     private final ConfigureActionOptions chopActionOptions;
     private final ConfigureActionOptions collectResourceActionOptions;
     private final ConfigureActionOptions digActionOptions;
@@ -24,16 +20,12 @@ class ConfigureOptions {
     private static final String DEFAULT_ACTION_OPTION = "" +
             "{\"minSkill\":10 ,\"maxSkill\":95 , \"longestTime\":100 , \"shortestTime\":10 , \"minimumStamina\":6000}";
 
-    private ConfigureOptions(float pveDepthMultiplier, float pvpDepthMultiplier, float pveSlopeMultiplier,
-                             float pvpSlopeMultiplier, ConfigureActionOptions chopActionOptions,
+    private ConfigureOptions(ConfigureActionOptions chopActionOptions,
                              ConfigureActionOptions collectResourceActionOptions,
                              ConfigureActionOptions digActionOptions, ConfigureActionOptions mineActionOptions,
                              ConfigureActionOptions packActionOptions, ConfigureActionOptions raiseDirtActionOptions,
                              ConfigureActionOptions raiseRockActionOptions) {
-        this.pveDepthMultiplier = pveDepthMultiplier;
-        this.pvpDepthMultiplier = pvpDepthMultiplier;
-        this.pveSlopeMultiplier = pveSlopeMultiplier;
-        this.pvpSlopeMultiplier = pvpSlopeMultiplier;
+
         this.chopActionOptions = chopActionOptions;
         this.collectResourceActionOptions = collectResourceActionOptions;
         this.digActionOptions = digActionOptions;
@@ -53,10 +45,6 @@ class ConfigureOptions {
                 throw new RuntimeException("properties can't be null here.");
 
             ConfigureOptions configureOptions = new ConfigureOptions(
-                    Float.parseFloat(properties.getProperty("pveDepthMultiplier", Float.toString(3f))),
-                    Float.parseFloat(properties.getProperty("pvpDepthMultiplier", Float.toString(1f))),
-                    Float.parseFloat(properties.getProperty("pveSlopeMultiplier", Float.toString(3f))),
-                    Float.parseFloat(properties.getProperty("pvpSlopeMultiplier", Float.toString(1f))),
                     doJsonToPOJO(properties.getProperty("chopAction", DEFAULT_ACTION_OPTION)),
                     doJsonToPOJO(properties.getProperty("collectResourceAction", DEFAULT_ACTION_OPTION)),
                     doJsonToPOJO(properties.getProperty("digAction", DEFAULT_ACTION_OPTION)),
@@ -75,10 +63,6 @@ class ConfigureOptions {
         if (properties == null)
             throw new RuntimeException("properties can't be null here.");
         ConfigureOptions configureOptions = new ConfigureOptions(
-                Float.parseFloat(properties.getProperty("pveDepthMultiplier", Float.toString(3f))),
-                Float.parseFloat(properties.getProperty("pvpDepthMultiplier", Float.toString(1f))),
-                Float.parseFloat(properties.getProperty("pveSlopeMultiplier", Float.toString(3f))),
-                Float.parseFloat(properties.getProperty("pvpSlopeMultiplier", Float.toString(1f))),
                 doJsonToPOJO(properties.getProperty("chopAction", DEFAULT_ACTION_OPTION)),
                 doJsonToPOJO(properties.getProperty("collectResourceAction", DEFAULT_ACTION_OPTION)),
                 doJsonToPOJO(properties.getProperty("digAction", DEFAULT_ACTION_OPTION)),
@@ -120,22 +104,6 @@ class ConfigureOptions {
 
     static ConfigureOptions getInstance() {
         return instance;
-    }
-
-    public float getPveDepthMultiplier() {
-        return pveDepthMultiplier;
-    }
-
-    public float getPvpDepthMultiplier() {
-        return pvpDepthMultiplier;
-    }
-
-    public float getPveSlopeMultiplier() {
-        return pveSlopeMultiplier;
-    }
-
-    public float getPvpSlopeMultiplier() {
-        return pvpSlopeMultiplier;
     }
 
     ConfigureActionOptions getChopActionOptions() {
